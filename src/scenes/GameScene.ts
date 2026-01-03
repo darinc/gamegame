@@ -4,6 +4,7 @@ import { Enemy } from '../entities/Enemy';
 import { Coin } from '../entities/Coin';
 import { Brick } from '../entities/Brick';
 import { QuestionBlock } from '../entities/QuestionBlock';
+import { PowerUp } from '../entities/PowerUp';
 import { InputManager } from '../systems/InputManager';
 import { LevelLoader } from '../levels/LevelLoader';
 import { level1 } from '../levels/level1';
@@ -31,6 +32,7 @@ export class GameScene extends Phaser.Scene {
   private coins: Coin[] = [];
   private bricks: Brick[] = [];
   private questionBlocks: QuestionBlock[] = [];
+  private powerUps: PowerUp[] = [];
   private inputManager!: InputManager;
   private levelLoader!: LevelLoader;
   private playerCount: number = 1; // Default to 1 player
@@ -48,6 +50,9 @@ export class GameScene extends Phaser.Scene {
 
   // Level exit
   private exitSprite: Phaser.GameObjects.Sprite | null = null;
+  private playersFinished: Set<Player> = new Set();
+  private levelCompleteCountdown: number = -1;
+  private countdownText: Phaser.GameObjects.Text | null = null;
 
   // Camera state
   private cameraTarget: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
@@ -67,6 +72,29 @@ export class GameScene extends Phaser.Scene {
       this.playerCount = playersParam ? parseInt(playersParam, 10) : 1;
     }
     this.playerCount = Math.max(1, Math.min(2, this.playerCount)); // Clamp 1-2
+
+    // Reset level completion state
+    this.playersFinished = new Set();
+    this.levelCompleteCountdown = -1;
+    this.countdownText = null;
+
+    // Reset all game object arrays (important when scene restarts)
+    this.players = [];
+    this.enemies = [];
+    this.coins = [];
+    this.bricks = [];
+    this.questionBlocks = [];
+    this.powerUps = [];
+    this.healthBars = [];
+    this.exitSprite = null;
+
+    // Reset camera target to avoid stale position from previous level
+    this.cameraTarget = new Phaser.Math.Vector2();
+
+    // Reset game state
+    this.coinCount = 0;
+    this.lives = 3;
+
     console.log(`Starting game with ${this.playerCount} player(s)`);
   }
 
@@ -327,9 +355,13 @@ export class GameScene extends Phaser.Scene {
       const horizontallyNear = Math.abs(headX - qBlockCenterX) < (qBlockBody.width / 2 + hitRadius);
 
       if (verticallyAligned && horizontallyNear) {
-        const coinPos = qBlock.activate();
-        if (coinPos) {
-          this.spawnCoinFromBlock(coinPos.x, coinPos.y);
+        const result = qBlock.activate();
+        if (result) {
+          if (result.isPowerUp) {
+            this.spawnPowerUpFromBlock(result.x, result.y);
+          } else {
+            this.spawnCoinFromBlock(result.x, result.y);
+          }
         }
       }
     }
@@ -385,9 +417,13 @@ export class GameScene extends Phaser.Scene {
       const horizontallyNear = Math.abs(feetX - qBlockCenterX) < (qBlockBody.width / 2 + hitRadius);
 
       if (verticallyAligned && horizontallyNear) {
-        const coinPos = qBlock.activate();
-        if (coinPos) {
-          this.spawnCoinFromBlock(coinPos.x, coinPos.y);
+        const result = qBlock.activate();
+        if (result) {
+          if (result.isPowerUp) {
+            this.spawnPowerUpFromBlock(result.x, result.y);
+          } else {
+            this.spawnCoinFromBlock(result.x, result.y);
+          }
         }
       }
     }
@@ -407,6 +443,50 @@ export class GameScene extends Phaser.Scene {
         // Auto-collect the coin after animation
         this.collectCoin(coin);
       }
+    });
+  }
+
+  private spawnPowerUpFromBlock(x: number, y: number): void {
+    // Determine direction: move away from nearest player
+    let moveDirection = 1;
+    if (this.players.length > 0) {
+      const nearestPlayer = this.players.reduce((nearest, player) => {
+        const distToCurrent = Math.abs(player.x - x);
+        const distToNearest = Math.abs(nearest.x - x);
+        return distToCurrent < distToNearest ? player : nearest;
+      });
+      moveDirection = nearestPlayer.x < x ? 1 : -1;
+    }
+
+    const powerUp = new PowerUp(this, x, y, moveDirection);
+    this.powerUps.push(powerUp);
+
+    // Set up collision with ground/platforms
+    const groundGroup = this.levelLoader.getGroundGroup();
+    const platformGroup = this.levelLoader.getPlatformGroup();
+    this.physics.add.collider(powerUp, groundGroup);
+    this.physics.add.collider(powerUp, platformGroup);
+
+    // Set up collision with bricks
+    this.bricks.forEach((brick) => {
+      this.physics.add.collider(powerUp, brick);
+    });
+
+    // Set up player overlap for collection
+    this.players.forEach((player) => {
+      this.physics.add.overlap(
+        player,
+        powerUp,
+        () => {
+          if (!player.getIsInBubble() && !powerUp.isCollected()) {
+            if (powerUp.collect()) {
+              player.powerUp();
+              this.updateHealthUI();
+              this.powerUps = this.powerUps.filter(p => p !== powerUp);
+            }
+          }
+        }
+      );
     });
   }
 
@@ -440,15 +520,72 @@ export class GameScene extends Phaser.Scene {
         this.exitSprite!,
         () => {
           if (!player.getIsInBubble()) {
-            this.handleLevelComplete();
+            this.handlePlayerReachedExit(player);
           }
         }
       );
     });
   }
 
-  private handleLevelComplete(): void {
+  private handlePlayerReachedExit(player: Player): void {
+    // Already finished?
+    if (this.playersFinished.has(player)) return;
+
+    this.playersFinished.add(player);
+
+    // Put the finished player in a "finished" state (hide them or freeze)
+    player.setVisible(false);
+    player.setActive(false);
+    (player.body as Phaser.Physics.Arcade.Body).enable = false;
+
+    // Check if all players have finished
+    if (this.playersFinished.size >= this.playerCount) {
+      this.completeLevel();
+      return;
+    }
+
+    // Start countdown for remaining players (3 seconds)
+    if (this.levelCompleteCountdown < 0) {
+      this.levelCompleteCountdown = 3;
+      this.createCountdownUI();
+    }
+  }
+
+  private createCountdownUI(): void {
+    this.countdownText = this.add.text(GAME_WIDTH / 2, 80, '', {
+      fontSize: '48px',
+      color: '#FFD700',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 6,
+    });
+    this.countdownText.setOrigin(0.5);
+    this.countdownText.setScrollFactor(0);
+    this.countdownText.setDepth(100);
+    this.updateCountdownUI();
+  }
+
+  private updateCountdownUI(): void {
+    if (this.countdownText && this.levelCompleteCountdown >= 0) {
+      const seconds = Math.ceil(this.levelCompleteCountdown);
+      this.countdownText.setText(`Hurry! ${seconds}`);
+    }
+  }
+
+  private updateLevelCountdown(delta: number): void {
+    if (this.levelCompleteCountdown < 0) return;
+
+    this.levelCompleteCountdown -= delta / 1000;
+    this.updateCountdownUI();
+
+    if (this.levelCompleteCountdown <= 0) {
+      this.completeLevel();
+    }
+  }
+
+  private completeLevel(): void {
     // Prevent multiple triggers
+    this.levelCompleteCountdown = -1;
     if (this.exitSprite) {
       this.exitSprite.destroy();
       this.exitSprite = null;
@@ -502,8 +639,8 @@ export class GameScene extends Phaser.Scene {
     this.debugText.setDepth(100);
     this.debugText.setVisible(this.debugVisible);
 
-    // Toggle debug with backtick key
-    this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.BACKTICK)
+    // Toggle debug with 0 key
+    this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ZERO)
       .on('down', () => {
         this.debugVisible = !this.debugVisible;
         this.debugText.setVisible(this.debugVisible);
@@ -577,11 +714,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    // Guard against updates during scene transition
+    if (!this.scene.isActive()) return;
+
     // Set seek targets for bubbled players
     this.updateBubbleTargets();
 
     // Update players and handle bubble input
     this.players.forEach((player, index) => {
+      if (!player.active) return;
       const input = this.inputManager.getInput(index);
 
       // Manual bubble: press Q (P1) or / (P2) or X button on controller
@@ -597,13 +738,23 @@ export class GameScene extends Phaser.Scene {
 
     // Update enemies
     this.enemies.forEach((enemy) => {
+      if (!enemy.active) return;
       enemy.update(time, delta);
+    });
+
+    // Update power-ups
+    this.powerUps.forEach((powerUp) => {
+      if (!powerUp.active) return;
+      powerUp.update();
     });
 
     // Check for tethering / bubble logic (only for 2 players)
     if (this.playerCount >= 2) {
       this.updateTethering();
     }
+
+    // Update level complete countdown
+    this.updateLevelCountdown(delta);
 
     // Update camera
     this.updateCamera(delta);
@@ -756,9 +907,14 @@ export class GameScene extends Phaser.Scene {
       '',
     ];
 
-    // Player positions
+    // Player positions and status
     this.players.forEach((p, i) => {
-      lines.push(`P${i + 1}: (${Math.round(p.x)}, ${Math.round(p.y)})${p.getIsInBubble() ? ' [BUBBLE]' : ''}`);
+      const status: string[] = [];
+      if (!p.active) status.push('INACTIVE');
+      if (this.playersFinished.has(p)) status.push('FINISHED');
+      if (p.getIsInBubble()) status.push('BUBBLE');
+      const statusStr = status.length > 0 ? ` [${status.join(', ')}]` : '';
+      lines.push(`P${i + 1}: (${Math.round(p.x)}, ${Math.round(p.y)})${statusStr}`);
     });
 
     // Distance (only show for 2 players)

@@ -20,7 +20,9 @@ const GROUND_POUND_VELOCITY = 800; // Fast downward velocity
 const GROUND_POUND_STALL_TIME = 150; // ms of hovering before pound
 
 // Bubble seek settings
-const BUBBLE_SEEK_SPEED = 120;
+const BUBBLE_SEEK_SPEED_MIN = 200;
+const BUBBLE_SEEK_SPEED_MAX = 600;
+const BUBBLE_SEEK_DISTANCE_THRESHOLD = 400; // Distance at which max speed kicks in
 const BUBBLE_WOBBLE_AMOUNT = 30;
 const BUBBLE_WOBBLE_SPEED = 0.003;
 
@@ -50,8 +52,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private facingRight: boolean = true;
 
   // Health system
-  private health: number = 1.0;
+  private health: number = 0.5; // Start with 2 health bars (half)
   private isInvincible: boolean = false;
+
+  // Power-up state
+  private isPoweredUp: boolean = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -68,13 +73,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    // Configure physics body
+    // Configure physics body - start small (half height)
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setCollideWorldBounds(false); // Allow falling out for death/respawn
-    body.setSize(28, 44);  // Slightly smaller than sprite for better feel
-    body.setOffset(2, 4);
+    body.setSize(28, 24);  // Small size - half height
+    body.setOffset(2, 24); // Offset to keep feet at same position
     body.setMaxVelocityX(RUN_SPEED);
     body.setDragX(0); // We handle deceleration manually
+
+    // Start at half height visually
+    this.setScale(1, 0.5);
 
     // Set depth based on player index
     this.setDepth(10 + playerIndex);
@@ -92,6 +100,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const onGround = body.blocked.down || body.touching.down;
 
+    // Base scale depends on power-up state
+    const baseScaleY = this.isPoweredUp ? 1 : 0.5;
+
     // Track grounded state for coyote time
     if (onGround) {
       this.lastGroundedTime = time;
@@ -101,11 +112,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.isGroundPounding = false;
         this.groundPoundStarted = false;
         // Landing impact effect
-        this.setScale(1.3, 0.7);
+        this.setScale(1.3, 0.7 * baseScaleY);
         this.scene.tweens.add({
           targets: this,
           scaleX: 1,
-          scaleY: 1,
+          scaleY: baseScaleY,
           duration: 150,
           ease: 'Back.easeOut',
         });
@@ -126,7 +137,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (!this.groundPoundStarted) {
         // Stall phase - hovering
         this.groundPoundStallTime += delta;
-        this.setScale(0.8, 1.2); // Stretch vertically
+        this.setScale(0.8, 1.2 * baseScaleY); // Stretch vertically
         if (this.groundPoundStallTime >= GROUND_POUND_STALL_TIME) {
           // Start the pound
           this.groundPoundStarted = true;
@@ -138,7 +149,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         if (body.velocity.y < GROUND_POUND_VELOCITY) {
           body.setVelocityY(GROUND_POUND_VELOCITY);
         }
-        this.setScale(0.9, 1.1); // Slight vertical stretch
+        this.setScale(0.9, 1.1 * baseScaleY); // Slight vertical stretch
       }
       return; // Skip normal movement during ground pound
     }
@@ -217,17 +228,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Landing squash
     if (onGround && Math.abs(body.velocity.y) < 50) {
-      this.setScale(1.1, 0.9);
+      this.setScale(1.1, 0.9 * baseScaleY);
       this.scene.tweens.add({
         targets: this,
         scaleX: 1,
-        scaleY: 1,
+        scaleY: baseScaleY,
         duration: 100,
         ease: 'Back.easeOut',
       });
     } else if (!onGround) {
       // In air - stretch based on vertical velocity
-      this.setScale(Math.max(0.85, squashX), Math.min(1.2, stretchY));
+      this.setScale(Math.max(0.85, squashX), Math.min(1.2, stretchY) * baseScaleY);
     }
   }
 
@@ -289,14 +300,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance > 10) {
+        // Speed scales with distance - faster when far away
+        const distanceFactor = Math.min(1, distance / BUBBLE_SEEK_DISTANCE_THRESHOLD);
+        const seekSpeed = BUBBLE_SEEK_SPEED_MIN + (BUBBLE_SEEK_SPEED_MAX - BUBBLE_SEEK_SPEED_MIN) * distanceFactor;
+
         // Normalize and apply speed
-        const speed = BUBBLE_SEEK_SPEED * (delta / 1000);
+        const speed = seekSpeed * (delta / 1000);
         const moveX = (dx / distance) * speed;
         const moveY = (dy / distance) * speed;
 
-        // Add wobble for organic floating feel
-        const wobbleX = Math.sin(time * BUBBLE_WOBBLE_SPEED) * BUBBLE_WOBBLE_AMOUNT * (delta / 1000);
-        const wobbleY = Math.cos(time * BUBBLE_WOBBLE_SPEED * 1.3) * BUBBLE_WOBBLE_AMOUNT * 0.5 * (delta / 1000);
+        // Add wobble for organic floating feel (reduced when moving fast)
+        const wobbleFactor = 1 - distanceFactor * 0.7;
+        const wobbleX = Math.sin(time * BUBBLE_WOBBLE_SPEED) * BUBBLE_WOBBLE_AMOUNT * wobbleFactor * (delta / 1000);
+        const wobbleY = Math.cos(time * BUBBLE_WOBBLE_SPEED * 1.3) * BUBBLE_WOBBLE_AMOUNT * 0.5 * wobbleFactor * (delta / 1000);
 
         this.x += moveX + wobbleX;
         this.y += moveY + wobbleY;
@@ -363,8 +379,55 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   resetHealth(): void {
-    this.health = 1.0;
+    // Reset to small state with 2 health bars
+    this.health = 0.5;
     this.isInvincible = false;
+    this.isPoweredUp = false;
+
+    // Shrink back to small size
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (body) {
+      body.setSize(28, 24);
+      body.setOffset(2, 24);
+    }
+    this.setScale(1, 0.5);
+  }
+
+  powerUp(): void {
+    if (this.isPoweredUp) return; // Already powered up
+
+    this.isPoweredUp = true;
+    this.health = 1.0; // Full 4 health bars
+
+    // Grow to full size
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (body) {
+      body.setSize(28, 44);
+      body.setOffset(2, 4);
+    }
+
+    // Move player up to keep feet on ground (sprite grows from center)
+    // Small height = 24, Big height = 48, difference = 24, move up by 12
+    const heightDifference = 12;
+
+    // Animate the growth upward
+    this.scene.tweens.add({
+      targets: this,
+      scaleY: 1,
+      y: this.y - heightDifference,
+      duration: 300,
+      ease: 'Back.easeOut',
+    });
+
+    // Brief invincibility during power-up
+    this.isInvincible = true;
+    this.scene.time.delayedCall(500, () => {
+      this.isInvincible = false;
+    });
+  }
+
+  getIsPoweredUp(): boolean {
+    return this.isPoweredUp;
   }
 
   isPlayerInvincible(): boolean {

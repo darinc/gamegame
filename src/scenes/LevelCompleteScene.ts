@@ -10,8 +10,6 @@ export class LevelCompleteScene extends Phaser.Scene {
   private coins: number = 0;
   private lives: number = 0;
   private canContinue: boolean = false;
-  private spaceKey!: Phaser.Input.Keyboard.Key;
-  private enterKey!: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super({ key: 'LevelCompleteScene' });
@@ -66,7 +64,7 @@ export class LevelCompleteScene extends Phaser.Scene {
     livesText.setOrigin(0.5);
 
     // Continue prompt
-    const continueText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 100, 'Press SPACE or ENTER to continue', {
+    const continueText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 100, 'Press JUMP to continue', {
       fontSize: '24px',
       color: '#ffffff',
       stroke: '#000000',
@@ -83,11 +81,16 @@ export class LevelCompleteScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // Setup keyboard input
-    if (this.input.keyboard) {
-      this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-      this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
-    }
+    // Setup keyboard input using scene-level keydown event
+    this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+      if (!this.canContinue) return;
+
+      // Accept: Space, Enter, W (P1 jump), Up Arrow (P2 jump)
+      if (event.code === 'Space' || event.code === 'Enter' ||
+          event.code === 'KeyW' || event.code === 'ArrowUp') {
+        this.continueGame();
+      }
+    });
 
     // Small delay to prevent accidental skip
     this.time.delayedCall(500, () => {
@@ -98,17 +101,7 @@ export class LevelCompleteScene extends Phaser.Scene {
   update(): void {
     if (!this.canContinue) return;
 
-    // Check keyboard
-    if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-      this.continueGame();
-      return;
-    }
-    if (this.enterKey && Phaser.Input.Keyboard.JustDown(this.enterKey)) {
-      this.continueGame();
-      return;
-    }
-
-    // Check gamepad
+    // Check gamepad jump button (button 0)
     if (this.input.gamepad) {
       const gamepads = this.input.gamepad.gamepads;
       for (const pad of gamepads) {

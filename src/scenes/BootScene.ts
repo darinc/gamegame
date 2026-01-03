@@ -212,5 +212,25 @@ export class BootScene extends Phaser.Scene {
     platformGraphics.fillRect(2, 2, 28, 6); // Top highlight
     platformGraphics.generateTexture('platform', 32, 32);
     platformGraphics.destroy();
+
+    // Power-up mushroom (red cap with white spots)
+    const mushroomGraphics = this.make.graphics({ x: 0, y: 0 });
+    // Red cap
+    mushroomGraphics.fillStyle(0xFF0000);
+    mushroomGraphics.fillRoundedRect(2, 4, 28, 18, 8);
+    // White spots on cap
+    mushroomGraphics.fillStyle(0xFFFFFF);
+    mushroomGraphics.fillCircle(10, 10, 4);
+    mushroomGraphics.fillCircle(22, 10, 4);
+    mushroomGraphics.fillCircle(16, 16, 3);
+    // Stem (beige/tan)
+    mushroomGraphics.fillStyle(0xFFF8DC);
+    mushroomGraphics.fillRect(10, 18, 12, 12);
+    // Eyes on stem
+    mushroomGraphics.fillStyle(0x000000);
+    mushroomGraphics.fillCircle(13, 24, 2);
+    mushroomGraphics.fillCircle(19, 24, 2);
+    mushroomGraphics.generateTexture('mushroom', 32, 32);
+    mushroomGraphics.destroy();
   }
 }

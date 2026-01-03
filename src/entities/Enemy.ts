@@ -40,6 +40,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   update(time: number, _delta: number): void {
+    // Guard against missing body (destroyed or during scene transition)
+    if (!this.body) return;
+
     if (this.enemyState === EnemyState.DEAD) {
       return;
     }
