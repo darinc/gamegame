@@ -8,7 +8,7 @@ import { QuestionBlock } from '../entities/QuestionBlock';
 import { PowerUp } from '../entities/PowerUp';
 import { InputManager } from '../systems/InputManager';
 import { LevelLoader } from '../levels/LevelLoader';
-import { level1 } from '../levels/level1';
+import { getLevel } from '../levels/index';
 import { generateLevel } from '../levels/ProceduralGenerator';
 import { generateHybridLevel } from '../levels/HybridGenerator';
 import { EnemyType } from '../levels/types';
@@ -115,8 +115,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Check for generation mode: ?hybrid=true (default) or ?procedural=true (old sparse style)
+    // Check URL params for level selection and generation mode
     const urlParams = new URLSearchParams(window.location.search);
+    const levelName = urlParams.get('level'); // e.g., ?level=smb1_1
     const useHybrid = urlParams.get('hybrid') === 'true';
     const useProcedural = urlParams.get('procedural') === 'true';
     const seed = urlParams.get('seed');
@@ -139,7 +140,10 @@ export class GameScene extends Phaser.Scene {
       this.levelLoader.load(proceduralLevel);
       console.log('Loaded procedural level');
     } else {
-      this.levelLoader.load(level1);
+      // Load named level from registry (defaults to level1)
+      const level = getLevel(levelName || 'level1');
+      this.levelLoader.load(level);
+      console.log(`Loaded level: ${level.name}`);
     }
 
     // Initialize input manager
@@ -166,7 +170,7 @@ export class GameScene extends Phaser.Scene {
     // Create debug UI
     this.createUI();
 
-    console.log('GameScene created with level:', level1.name);
+    console.log('GameScene created');
   }
 
   private createPlayers(): void {
