@@ -354,6 +354,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.health -= damage;
     this.isInvincible = true;
 
+    // If powered up and health drops to half or below, shrink to small
+    // (but keep the reduced health - don't reset it)
+    if (this.isPoweredUp && this.health <= 0.5) {
+      this.shrink();
+    }
+
     // Flash effect
     this.scene.tweens.add({
       targets: this,
@@ -372,6 +378,24 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     body.setVelocityY(-200);
 
     return this.health <= 0;
+  }
+
+  private shrink(): void {
+    this.isPoweredUp = false;
+
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (body) {
+      body.setSize(28, 24);
+      body.setOffset(2, 24);
+    }
+
+    // Animate the shrink
+    this.scene.tweens.add({
+      targets: this,
+      scaleY: 0.5,
+      duration: 200,
+      ease: 'Back.easeIn',
+    });
   }
 
   getHealth(): number {
@@ -436,5 +460,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   isPlayerGroundPounding(): boolean {
     return this.isGroundPounding && this.groundPoundStarted;
+  }
+
+  // Set initial state (used when persisting between levels)
+  setInitialState(health: number, isPoweredUp: boolean): void {
+    this.health = health;
+    this.isPoweredUp = isPoweredUp;
+
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (isPoweredUp) {
+      // Set to full size
+      if (body) {
+        body.setSize(28, 44);
+        body.setOffset(2, 4);
+      }
+      this.setScale(1, 1);
+    } else {
+      // Set to small size
+      if (body) {
+        body.setSize(28, 24);
+        body.setOffset(2, 24);
+      }
+      this.setScale(1, 0.5);
+    }
   }
 }

@@ -15,6 +15,7 @@ export type TileType = typeof TileType[keyof typeof TileType];
 export const EnemyType = {
   GOOMBA: 'goomba',
   KOOPA: 'koopa',
+  BULL: 'bull',
 } as const;
 
 export type EnemyType = typeof EnemyType[keyof typeof EnemyType];
@@ -38,6 +39,22 @@ export interface LevelExit {
   y: number;
   type: 'flagpole' | 'door';
 }
+
+// Level chunk for hybrid generation
+export interface LevelChunk {
+  name: string;
+  width: number;
+  height: number;
+  tiles: number[][];           // 2D array of TileType
+  entryHeight: number;         // Ground level at left edge (tiles from bottom)
+  exitHeight: number;          // Ground level at right edge (tiles from bottom)
+  difficulty: number;          // 1-10 scale
+  tags: ChunkTag[];
+  coinSpawns?: CoinSpawn[];
+  enemySpawns?: SpawnPoint[];
+}
+
+export type ChunkTag = 'platforming' | 'combat' | 'reward' | 'transition';
 
 // Level data format
 export interface LevelData {

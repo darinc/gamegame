@@ -25,27 +25,29 @@ export class QuestionBlock extends Phaser.Physics.Arcade.Sprite {
     this.containsPowerUp = Math.random() < POWERUP_CHANCE;
   }
 
-  activate(): BlockActivationResult | null {
+  activate(fromAbove: boolean = false): BlockActivationResult | null {
     if (this.activated) return null;
     this.activated = true;
 
     // Change appearance to "used" block (darker)
     this.setTint(0x888888);
 
-    // Bump animation
+    // Bump animation (direction depends on hit direction)
     const originalY = this.y;
+    const bumpDirection = fromAbove ? 8 : -8;
     this.scene.tweens.add({
       targets: this,
-      y: originalY - 8,
+      y: originalY + bumpDirection,
       duration: 80,
       yoyo: true,
       ease: 'Quad.easeOut',
     });
 
-    // Return position and type for spawn (above the block)
+    // Return position and type for spawn
+    // Spawn below block if hit from above (ground pound), above if hit from below (head bump)
     return {
       x: this.x,
-      y: this.y - 32,
+      y: fromAbove ? this.y + 32 : this.y - 32,
       isPowerUp: this.containsPowerUp,
     };
   }

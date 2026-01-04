@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
 import { Enemy } from '../entities/Enemy';
+import { ChargingBull } from '../entities/ChargingBull';
 import { Coin } from '../entities/Coin';
 import { Brick } from '../entities/Brick';
 import { QuestionBlock } from '../entities/QuestionBlock';
@@ -9,6 +10,8 @@ import { InputManager } from '../systems/InputManager';
 import { LevelLoader } from '../levels/LevelLoader';
 import { level1 } from '../levels/level1';
 import { generateLevel } from '../levels/ProceduralGenerator';
+import { generateHybridLevel } from '../levels/HybridGenerator';
+import { EnemyType } from '../levels/types';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config';
 
 // Tethered camera settings
@@ -21,14 +24,24 @@ const ZOOM_DISTANCE_THRESHOLD = 500;
 // Stomp bounce velocity
 const STOMP_BOUNCE = -300;
 
+// Player state for persistence between levels
+interface PlayerState {
+  health: number;
+  isPoweredUp: boolean;
+}
+
 // Game settings - can be passed via scene data
 interface GameSettings {
-  playerCount: number;
+  playerCount?: number;
+  playerStates?: PlayerState[];
+  lives?: number;
+  coins?: number;
 }
 
 export class GameScene extends Phaser.Scene {
   private players: Player[] = [];
   private enemies: Enemy[] = [];
+  private bulls: ChargingBull[] = [];
   private coins: Coin[] = [];
   private bricks: Brick[] = [];
   private questionBlocks: QuestionBlock[] = [];
@@ -36,6 +49,7 @@ export class GameScene extends Phaser.Scene {
   private inputManager!: InputManager;
   private levelLoader!: LevelLoader;
   private playerCount: number = 1; // Default to 1 player
+  private initialPlayerStates: PlayerState[] = []; // For level persistence
 
   // Game state
   private coinCount: number = 0;
@@ -81,6 +95,7 @@ export class GameScene extends Phaser.Scene {
     // Reset all game object arrays (important when scene restarts)
     this.players = [];
     this.enemies = [];
+    this.bulls = [];
     this.coins = [];
     this.bricks = [];
     this.questionBlocks = [];
@@ -91,23 +106,35 @@ export class GameScene extends Phaser.Scene {
     // Reset camera target to avoid stale position from previous level
     this.cameraTarget = new Phaser.Math.Vector2();
 
-    // Reset game state
-    this.coinCount = 0;
-    this.lives = 3;
+    // Use persisted game state if coming from level complete, otherwise reset
+    this.coinCount = data.coins ?? 0;
+    this.lives = data.lives ?? 3;
+    this.initialPlayerStates = data.playerStates ?? [];
 
     console.log(`Starting game with ${this.playerCount} player(s)`);
   }
 
   create(): void {
-    // Check if procedural generation is enabled: ?procedural=true
+    // Check for generation mode: ?hybrid=true (default) or ?procedural=true (old sparse style)
     const urlParams = new URLSearchParams(window.location.search);
+    const useHybrid = urlParams.get('hybrid') === 'true';
     const useProcedural = urlParams.get('procedural') === 'true';
     const seed = urlParams.get('seed');
+    const difficulty = urlParams.get('difficulty');
 
     // Initialize level loader and load level
     this.levelLoader = new LevelLoader(this);
 
-    if (useProcedural) {
+    if (useHybrid) {
+      // Hybrid generation: hand-crafted chunks + procedural bridges
+      const hybridLevel = generateHybridLevel(
+        seed ? parseInt(seed, 10) : undefined,
+        { difficulty: difficulty ? parseInt(difficulty, 10) : 5 }
+      );
+      this.levelLoader.load(hybridLevel);
+      console.log('Loaded hybrid level');
+    } else if (useProcedural) {
+      // Pure procedural generation (sparse, original algorithm)
       const proceduralLevel = generateLevel(seed ? parseInt(seed, 10) : undefined);
       this.levelLoader.load(proceduralLevel);
       console.log('Loaded procedural level');
@@ -154,6 +181,12 @@ export class GameScene extends Phaser.Scene {
       const player = new Player(this, pos.x, pos.y, index);
       this.players.push(player);
 
+      // Apply persisted state from previous level if available
+      const savedState = this.initialPlayerStates[index];
+      if (savedState) {
+        player.setInitialState(savedState.health, savedState.isPoweredUp);
+      }
+
       // Set up collisions with level
       this.physics.add.collider(player, groundGroup);
       this.physics.add.collider(player, platformGroup);
@@ -199,18 +232,35 @@ export class GameScene extends Phaser.Scene {
 
     spawns.forEach((spawn) => {
       const pos = this.levelLoader.gridToPixel(spawn.x, spawn.y);
-      const enemy = new Enemy(this, pos.x, pos.y);
-      this.enemies.push(enemy);
 
-      // Give enemy reference to ground for ledge detection
-      enemy.setGroundGroup(allGround);
+      if (spawn.type === EnemyType.BULL) {
+        // Create charging bull
+        const bull = new ChargingBull(this, pos.x, pos.y);
+        this.bulls.push(bull);
 
-      // Enemy collides with ground/platforms
-      this.physics.add.collider(enemy, groundGroup);
-      this.physics.add.collider(enemy, platformGroup);
+        // Give bull references
+        bull.setGroundGroup(allGround);
+        bull.setPlayers(this.players);
+        bull.setBricks(this.bricks);
+
+        // Bull collides with ground/platforms
+        this.physics.add.collider(bull, groundGroup);
+        this.physics.add.collider(bull, platformGroup);
+      } else {
+        // Create regular goomba enemy
+        const enemy = new Enemy(this, pos.x, pos.y);
+        this.enemies.push(enemy);
+
+        // Give enemy reference to ground for ledge detection
+        enemy.setGroundGroup(allGround);
+
+        // Enemy collides with ground/platforms
+        this.physics.add.collider(enemy, groundGroup);
+        this.physics.add.collider(enemy, platformGroup);
+      }
     });
 
-    // Set up player-enemy collisions
+    // Set up player-enemy collisions for regular enemies
     this.players.forEach((player) => {
       this.enemies.forEach((enemy) => {
         this.physics.add.overlap(
@@ -218,6 +268,19 @@ export class GameScene extends Phaser.Scene {
           enemy,
           (_playerObj, _enemyObj) => {
             this.handlePlayerEnemyCollision(player, enemy);
+          }
+        );
+      });
+    });
+
+    // Set up player-bull collisions
+    this.players.forEach((player) => {
+      this.bulls.forEach((bull) => {
+        this.physics.add.overlap(
+          player,
+          bull,
+          (_playerObj, _bullObj) => {
+            this.handlePlayerBullCollision(player, bull);
           }
         );
       });
@@ -244,6 +307,37 @@ export class GameScene extends Phaser.Scene {
       // Player got hit - take damage
       const knockbackDir = player.x < enemy.x ? -1 : 1;
       playerBody.setVelocityX(knockbackDir * 200);
+
+      const isDead = player.takeDamage(this.time.now);
+      this.updateHealthUI();
+
+      if (isDead) {
+        this.handlePlayerDeath(player);
+      }
+    }
+  }
+
+  private handlePlayerBullCollision(player: Player, bull: ChargingBull): void {
+    // Don't interact if player is in bubble or bull is dead
+    if (player.getIsInBubble()) return;
+    if (!bull.isAlive()) return;
+
+    const playerBody = player.body as Phaser.Physics.Arcade.Body;
+
+    // Check if player can stomp the bull
+    if (bull.canBeStomped(playerBody)) {
+      // Stomp the bull!
+      bull.stomp(this.time.now);
+
+      // Bounce the player
+      playerBody.setVelocityY(STOMP_BOUNCE);
+
+      console.log('Bull stomped!');
+    } else {
+      // Player got hit - take damage (extra knockback if bull is charging)
+      const knockbackDir = player.x < bull.x ? -1 : 1;
+      const knockbackForce = bull.isCharging() ? 350 : 200;
+      playerBody.setVelocityX(knockbackDir * knockbackForce);
 
       const isDead = player.takeDamage(this.time.now);
       this.updateHealthUI();
@@ -284,19 +378,49 @@ export class GameScene extends Phaser.Scene {
     this.bricks = this.levelLoader.getBricks();
     this.questionBlocks = this.levelLoader.getQuestionBlocks();
 
-    // Set up player-brick collisions (just for physics, head bump handled separately)
+    // Set up player-brick collisions
+    // Process callback returns false during ground pound to allow passing through
     this.players.forEach((player) => {
       this.bricks.forEach((brick) => {
-        this.physics.add.collider(player, brick, () => {
-          this.checkHeadBump(player);
-          this.checkGroundPound(player);
-        });
+        this.physics.add.collider(
+          player,
+          brick,
+          () => {
+            this.checkHeadBump(player);
+            this.checkGroundPound(player);
+          },
+          () => {
+            // Allow passing through bricks while ground pounding (breaks them)
+            if (player.isPlayerGroundPounding() && !brick.isBroken()) {
+              brick.break();
+              return false; // Don't collide - pass through
+            }
+            return !brick.isBroken(); // Normal collision if not broken
+          },
+          this
+        );
       });
       this.questionBlocks.forEach((qBlock) => {
-        this.physics.add.collider(player, qBlock, () => {
-          this.checkHeadBump(player);
-          this.checkGroundPound(player);
-        });
+        this.physics.add.collider(
+          player,
+          qBlock,
+          () => {
+            this.checkHeadBump(player);
+            // Activate question block on ground pound but stay solid
+            if (player.isPlayerGroundPounding() && !qBlock.isActivated()) {
+              const result = qBlock.activate(true); // true = from above (ground pound)
+              if (result) {
+                if (result.isPowerUp) {
+                  this.spawnPowerUpFromBlock(result.x, result.y);
+                } else {
+                  this.spawnCoinFromBlock(result.x, result.y);
+                }
+              }
+            }
+          },
+          undefined, // No process callback - question blocks are always solid
+          this
+        );
       });
     });
 
@@ -307,6 +431,13 @@ export class GameScene extends Phaser.Scene {
       });
       this.questionBlocks.forEach((qBlock) => {
         this.physics.add.collider(enemy, qBlock);
+      });
+    });
+
+    // Bulls collide with question blocks (but break bricks while charging - handled in ChargingBull)
+    this.bulls.forEach((bull) => {
+      this.questionBlocks.forEach((qBlock) => {
+        this.physics.add.collider(bull, qBlock);
       });
     });
   }
@@ -386,6 +517,8 @@ export class GameScene extends Phaser.Scene {
     const feetY = playerBody.bottom;
     const hitRadius = 20; // How far left/right to check for blocks
 
+    let brokeAnyBlock = false;
+
     // Check all bricks near the feet
     for (const brick of this.bricks) {
       if (brick.isBroken()) continue;
@@ -401,6 +534,7 @@ export class GameScene extends Phaser.Scene {
 
       if (verticallyAligned && horizontallyNear) {
         brick.break();
+        brokeAnyBlock = true;
       }
     }
 
@@ -417,7 +551,8 @@ export class GameScene extends Phaser.Scene {
       const horizontallyNear = Math.abs(feetX - qBlockCenterX) < (qBlockBody.width / 2 + hitRadius);
 
       if (verticallyAligned && horizontallyNear) {
-        const result = qBlock.activate();
+        const result = qBlock.activate(true); // true = from above (ground pound)
+        brokeAnyBlock = true;
         if (result) {
           if (result.isPowerUp) {
             this.spawnPowerUpFromBlock(result.x, result.y);
@@ -426,6 +561,12 @@ export class GameScene extends Phaser.Scene {
           }
         }
       }
+    }
+
+    // If we broke any blocks, maintain ground pound momentum
+    // This prevents the collision from killing the player's speed
+    if (brokeAnyBlock) {
+      playerBody.setVelocityY(800); // GROUND_POUND_VELOCITY
     }
   }
 
@@ -591,10 +732,17 @@ export class GameScene extends Phaser.Scene {
       this.exitSprite = null;
     }
 
+    // Gather player states for persistence
+    const playerStates = this.players.map(player => ({
+      health: player.getHealth(),
+      isPoweredUp: player.getIsPoweredUp(),
+    }));
+
     // Show level complete and go to next level or restart
     this.scene.start('LevelCompleteScene', {
       coins: this.coinCount,
       lives: this.lives,
+      playerStates,
     });
   }
 
@@ -740,6 +888,12 @@ export class GameScene extends Phaser.Scene {
     this.enemies.forEach((enemy) => {
       if (!enemy.active) return;
       enemy.update(time, delta);
+    });
+
+    // Update bulls
+    this.bulls.forEach((bull) => {
+      if (!bull.active) return;
+      bull.update(time, delta);
     });
 
     // Update power-ups
@@ -926,7 +1080,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     const aliveEnemies = this.enemies.filter(e => e.isAlive()).length;
+    const aliveBulls = this.bulls.filter(b => b.isAlive()).length;
     lines.push(`Enemies: ${aliveEnemies}/${this.enemies.length}`);
+    lines.push(`Bulls: ${aliveBulls}/${this.bulls.length}`);
 
     this.debugText.setText(lines.join('\n'));
   }

@@ -68,9 +68,11 @@ export const level1: LevelData = {
     { x: 20, y: 19, type: EnemyType.GOOMBA },
     { x: 35, y: 19, type: EnemyType.GOOMBA },
     { x: 45, y: 7, type: EnemyType.GOOMBA },  // On platform
+    { x: 50, y: 19, type: EnemyType.BULL },   // Charging bull
     { x: 58, y: 19, type: EnemyType.GOOMBA },
     { x: 75, y: 19, type: EnemyType.GOOMBA },
     { x: 80, y: 11, type: EnemyType.GOOMBA },  // On platform
+    { x: 85, y: 19, type: EnemyType.BULL },   // Another charging bull near end
   ],
   coinSpawns: [
     // Early coins on ground

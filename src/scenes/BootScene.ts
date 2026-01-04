@@ -129,6 +129,39 @@ export class BootScene extends Phaser.Scene {
     goombaGraphics.generateTexture('goomba', 32, 32);
     goombaGraphics.destroy();
 
+    // Charging Bull enemy (burnt orange, stocky with horns)
+    const bullGraphics = this.make.graphics({ x: 0, y: 0 });
+    // Body (burnt orange, wide and stocky)
+    bullGraphics.fillStyle(0xCC5500);
+    bullGraphics.fillRoundedRect(0, 10, 40, 20, 4);
+    // Head (slightly darker)
+    bullGraphics.fillStyle(0xAA4400);
+    bullGraphics.fillRoundedRect(0, 8, 14, 16, 3);
+    // Horns (dark gray)
+    bullGraphics.fillStyle(0x444444);
+    bullGraphics.fillTriangle(2, 8, 6, 0, 10, 8);   // Left horn
+    bullGraphics.fillTriangle(30, 8, 34, 0, 38, 8); // Right horn
+    // Legs (4 stubby legs)
+    bullGraphics.fillStyle(0x8B3300);
+    bullGraphics.fillRect(4, 26, 6, 6);   // Front left
+    bullGraphics.fillRect(14, 26, 6, 6);  // Front right
+    bullGraphics.fillRect(22, 26, 6, 6);  // Back left
+    bullGraphics.fillRect(32, 26, 6, 6);  // Back right
+    // Angry eyes (white with red tint)
+    bullGraphics.fillStyle(0xFFCCCC);
+    bullGraphics.fillCircle(4, 14, 3);  // Left eye
+    bullGraphics.fillCircle(10, 14, 3); // Right eye
+    // Pupils (black, looking forward)
+    bullGraphics.fillStyle(0x000000);
+    bullGraphics.fillCircle(5, 14, 1.5);  // Left pupil
+    bullGraphics.fillCircle(11, 14, 1.5); // Right pupil
+    // Nostrils (dark)
+    bullGraphics.fillStyle(0x331100);
+    bullGraphics.fillCircle(3, 20, 2);  // Left nostril
+    bullGraphics.fillCircle(9, 20, 2);  // Right nostril
+    bullGraphics.generateTexture('bull', 40, 32);
+    bullGraphics.destroy();
+
     // Coin (yellow circle with shine)
     const coinGraphics = this.make.graphics({ x: 0, y: 0 });
     coinGraphics.fillStyle(0xFFD700);

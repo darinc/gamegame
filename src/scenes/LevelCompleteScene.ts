@@ -1,14 +1,21 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config';
 
+interface PlayerState {
+  health: number;
+  isPoweredUp: boolean;
+}
+
 interface LevelCompleteData {
   coins: number;
   lives: number;
+  playerStates?: PlayerState[];
 }
 
 export class LevelCompleteScene extends Phaser.Scene {
   private coins: number = 0;
   private lives: number = 0;
+  private playerStates: PlayerState[] = [];
   private canContinue: boolean = false;
 
   constructor() {
@@ -18,6 +25,7 @@ export class LevelCompleteScene extends Phaser.Scene {
   init(data: LevelCompleteData): void {
     this.coins = data.coins || 0;
     this.lives = data.lives || 0;
+    this.playerStates = data.playerStates || [];
   }
 
   create(): void {
@@ -115,6 +123,10 @@ export class LevelCompleteScene extends Phaser.Scene {
 
   private continueGame(): void {
     this.canContinue = false; // Prevent double-trigger
-    this.scene.start('GameScene');
+    this.scene.start('GameScene', {
+      playerStates: this.playerStates,
+      lives: this.lives,
+      coins: this.coins,
+    });
   }
 }
