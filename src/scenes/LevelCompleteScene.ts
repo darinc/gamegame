@@ -29,7 +29,35 @@ export class LevelCompleteScene extends Phaser.Scene {
     this.canContinue = false;
 
     // Green overlay
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x004400, 0.8);
+    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x0d5a2a, 0.88);
+
+    // Confetti rain
+    if (this.textures.exists('star')) {
+      this.add.particles(0, -20, 'star', {
+        x: { min: 0, max: GAME_WIDTH },
+        y: -20,
+        quantity: 2,
+        frequency: 90,
+        lifespan: 3200,
+        speedY: { min: 120, max: 260 },
+        speedX: { min: -40, max: 40 },
+        scale: { start: 1.1, end: 0.4 },
+        rotate: { min: 0, max: 360 },
+        tint: [0xffd23f, 0xff6b6b, 0x39c46a, 0x4f8ef7, 0xffffff],
+      }).setDepth(1);
+    }
+
+    // The two heroes celebrating at the bottom.
+    [['player1', GAME_WIDTH / 2 - 70], ['player2', GAME_WIDTH / 2 + 70]].forEach(([key, x], i) => {
+      if (!this.textures.exists(key as string)) return;
+      const hero = this.add.sprite(x as number, GAME_HEIGHT - 110, key as string).setScale(2.4).setDepth(5);
+      const walk = key === 'player1' ? 'p1-walk' : 'p2-walk';
+      if (this.anims.exists(walk)) hero.play(walk);
+      this.tweens.add({
+        targets: hero, y: hero.y - 26, duration: 360, yoyo: true, repeat: -1,
+        delay: i * 180, ease: 'Sine.easeOut',
+      });
+    });
 
     // Level Complete text (shows which level was just cleared)
     const cleared = Math.max(1, this.settings.levelNumber - 1);

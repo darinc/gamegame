@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-06-13
+
+A "make it actually fun to play" pass: sound, characters, and game feel.
+
+### Added
+
+- **Synthesized audio** (`AudioSynth`) — every sound is generated at runtime with
+  the WebAudio API (no asset files, matching the all-in-code texture approach):
+  jump, coin, stomp, brick break, power-up/down, hurt, death, bubble/pop,
+  ground-pound thud, bull charge, menu blips, a level-complete fanfare, a
+  game-over sting, and a looping chiptune. Resumes safely on first input
+  (autoplay policy). **M** mutes (persisted).
+- **Pixel-art characters & props** — a tiny pixel-map rasterizer renders two
+  distinct heroes (cap, overalls, eyes, gloves, boots) with **idle / walk / jump /
+  hurt** animation frames, a cuter critter enemy (2-frame walk), a horned bull, a
+  spinning coin, and redesigned mushroom, "?" block, brick, ground, pipe, and
+  flag. Plus a sky gradient, glowing sun, and animated parallax scenery.
+- **Score system** with floating popups, a time-window **stomp combo**, and a
+  **1UP at a 5× chain**. Score carries across the endless run and shows on the
+  level-complete and game-over screens.
+- **Juice**: jump/landing dust, coin sparkles, stomp star-bursts, and screen
+  shake on ground-pounds and stomps. Level-complete screen now rains confetti
+  with the two heroes celebrating.
+
+### Changed
+
+- Tighter camera framing so the heroes feel present instead of tiny.
+- The HUD now renders in its own parallel `HudScene` with an un-zoomed camera,
+  fed via the shared registry.
+- Player animation state machine composes cleanly with the existing
+  squash/stretch and small/big scaling.
+
+### Fixed
+
+- HUD no longer distorts when the camera zooms (a latent bug: a Phaser camera's
+  zoom scales `scrollFactor(0)` UI too, so the dynamic co-op zoom-out used to push
+  the HUD off-screen). Moving the HUD to its own scene fixes it.
+- The landing squash spawned a fresh tween *every frame* while standing still; it
+  now fires once, on the air→ground transition.
+
 ## [0.5.0] - 2026-06-13
 
 ### Added

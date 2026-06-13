@@ -269,6 +269,9 @@ class AudioSynth {
     if (!ctx || !song || !this.musicOn) return;
 
     const secondsPerStep = 60 / song.bpm / song.stepsPerBeat;
+    // If we fell behind (e.g. the context was suspended until the first gesture),
+    // snap forward instead of firing a burst of past-due notes.
+    if (this.nextNoteTime < ctx.currentTime) this.nextNoteTime = ctx.currentTime + 0.05;
     // Look ahead ~120ms and queue any notes due in that window.
     while (this.nextNoteTime < ctx.currentTime + 0.12) {
       const i = this.step % song.lead.length;

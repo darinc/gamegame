@@ -38,7 +38,36 @@ and a polished look — all still generated in-code (no asset pipeline).
 - [ ] CHANGELOG 0.6.0, commit on feature branch, merge to main.
 
 ## Review
-(filled in as work completes)
+
+Shipped a full "make it fun" pass, verified with Playwright at each step.
+
+**New files**
+- `src/systems/AudioSynth.ts` — runtime-synthesized SFX + chiptune music (no
+  assets), autoplay-safe, mutable. Replaces the no-op SoundManager.
+- `src/scenes/HudScene.ts` — HUD in its own un-zoomed scene, fed via registry.
+
+**Reworked**
+- `BootScene` — pixel-map rasterizer + a full, cohesive art set (heroes with
+  4 animation states, critter, bull, coin spin, mushroom, blocks, pipe, flag,
+  sky/sun/scenery).
+- `Player` — animation state machine + jump/land/pound juice (dust, thud, shake);
+  fixed a per-frame landing-tween wart.
+- `GameScene` — score + stomp combo + 1UP, score/coin/stomp/powerup/death SFX,
+  floating popups, sky+sun background, tighter zoom, HUD via registry/HudScene.
+- Entities (`Coin`, `Brick`, `Enemy`, `ChargingBull`) — SFX + animations.
+- `TitleScene` / `LevelCompleteScene` / `GameOverScene` — music, menu SFX,
+  animated heroes, score display, confetti celebration.
+
+**Verified (Playwright, zero console errors beyond favicon 404)**
+- Title renders with animated heroes; demo gameplay shows the new art + HUD.
+- Endless advance Level 1→2→…→4 carries score (8600→8800) and coins.
+- Level-complete (confetti + score) and game-over (score) screens render and the
+  HUD scene cleanly stops on transition.
+- `tsc --noEmit` + `npm run build` clean.
+
+**Deliberately deferred**
+- 2-tile terrain-step smoothing (humans clear them instantly; only the bot
+  hesitates). Left for a focused generator pass.
 
 ---
 
