@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-const POWERUP_CHANCE = 0.25; // 25% chance to contain a power-up
+const POWERUP_CHANCE = 0.35; // chance to contain a power-up (rest are coins)
 
 export interface BlockActivationResult {
   x: number;

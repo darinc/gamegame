@@ -76,8 +76,9 @@ export class HybridGenerator {
     const selected: LevelChunk[] = [];
     const maxDifficulty = this.config.difficulty;
 
-    // Get eligible chunks based on difficulty
-    const eligible = getChunksByDifficulty(maxDifficulty + 2); // Allow slightly harder chunks
+    // Get eligible chunks based on difficulty. Keep the ceiling close to the
+    // requested difficulty so "easy" stays easy (no 4-tall pipe gauntlets etc).
+    const eligible = getChunksByDifficulty(maxDifficulty + 1);
 
     // Shuffle and pick
     const shuffled = [...eligible].sort(() => Math.random() - 0.5);
@@ -222,8 +223,12 @@ export class HybridGenerator {
         groundLevel = Math.floor(startHeight + heightDiff * progress);
       }
 
-      // Place ground tiles up to the calculated height
-      for (let h = 0; h < 2 + groundLevel; h++) {
+      // Fill ground so the SURFACE sits `groundLevel` tiles from the bottom.
+      // (groundLevel is in the same "tiles from bottom" units as the start zone
+      // and chunk floors, which are 2 tall — so a flat bridge fills 2 rows and is
+      // flush with its neighbours instead of forming an unclimbable wall.)
+      const fillRows = Math.max(2, groundLevel);
+      for (let h = 0; h < fillRows; h++) {
         const y = this.config.height - 1 - h;
         if (y >= 0) {
           this.tiles[y][x] = TileType.GROUND;
@@ -242,8 +247,15 @@ export class HybridGenerator {
     const midX = startX + Math.floor(bridgeWidth / 2);
     const groundY = this.config.height - 2;
 
-    // Add a small gap sometimes
-    if (bridgeWidth > 15 && Math.random() < 0.3) {
+    // Add a small gap sometimes (only above easy difficulty — on easy levels the
+    // only pits come from hand-crafted chunks with coin guides over them). Only
+    // carve where the bridge surface is the flat 2-tall base, otherwise removing
+    // just the bottom two rows of a raised ramp would leave a floating ledge.
+    const isFlatBase = (x: number) =>
+      this.tiles[groundY][x] === TileType.GROUND &&
+      this.tiles[groundY - 1][x] === TileType.EMPTY;
+    const flatGap = isFlatBase(midX - 1) && isFlatBase(midX) && isFlatBase(midX + 1);
+    if (this.config.difficulty >= 3 && bridgeWidth > 15 && flatGap && Math.random() < 0.3) {
       const gapX = midX - 1;
       for (let i = 0; i < 3; i++) {
         if (gapX + i < endX - 3 && gapX + i > startX + 3) {

@@ -423,8 +423,27 @@ export class ProceduralGenerator {
   }
 }
 
+// Build a config from a difficulty (1-10). Lower difficulty => fewer/smaller
+// gaps, fewer enemies, more coins. This makes "easy" levels genuinely easy.
+function configForDifficulty(difficulty: number): Partial<GeneratorConfig> {
+  const d = Math.max(1, Math.min(10, difficulty));
+  const t = (d - 1) / 9; // 0 (easiest) .. 1 (hardest)
+  return {
+    difficulty: d,
+    gapChance: 0.05 + t * 0.15,     // 0.05 easy -> 0.20 hard
+    enemyDensity: 0.12 + t * 0.33,  // sparse when easy
+    coinDensity: 0.7 - t * 0.3,     // generous when easy
+    platformDensity: 0.3 + t * 0.2,
+  };
+}
+
 // Helper function to generate a level with a seed-like configuration
-export function generateLevel(seed?: number): LevelData {
+export function generateLevel(
+  seed?: number,
+  options: { difficulty?: number } = {},
+): LevelData {
+  const config = configForDifficulty(options.difficulty ?? DEFAULT_CONFIG.difficulty);
+
   if (seed !== undefined) {
     let currentSeed = seed;
     const seededRandom = () => {
@@ -433,12 +452,12 @@ export function generateLevel(seed?: number): LevelData {
     };
     const originalRandom = Math.random;
     Math.random = seededRandom;
-    const generator = new ProceduralGenerator();
+    const generator = new ProceduralGenerator(config);
     const level = generator.generate();
     Math.random = originalRandom;
     return level;
   }
 
-  const generator = new ProceduralGenerator();
+  const generator = new ProceduralGenerator(config);
   return generator.generate();
 }

@@ -1,21 +1,18 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config';
-
-interface PlayerState {
-  health: number;
-  isPoweredUp: boolean;
-}
+import { buildSettings, DEFAULT_SETTINGS } from '../settings';
+import type { GameSettings } from '../settings';
 
 interface LevelCompleteData {
   coins: number;
   lives: number;
-  playerStates?: PlayerState[];
+  settings: GameSettings;
 }
 
 export class LevelCompleteScene extends Phaser.Scene {
   private coins: number = 0;
   private lives: number = 0;
-  private playerStates: PlayerState[] = [];
+  private settings: GameSettings = DEFAULT_SETTINGS;
   private canContinue: boolean = false;
 
   constructor() {
@@ -25,7 +22,7 @@ export class LevelCompleteScene extends Phaser.Scene {
   init(data: LevelCompleteData): void {
     this.coins = data.coins || 0;
     this.lives = data.lives || 0;
-    this.playerStates = data.playerStates || [];
+    this.settings = data.settings ? buildSettings(data.settings) : buildSettings({});
   }
 
   create(): void {
@@ -34,8 +31,9 @@ export class LevelCompleteScene extends Phaser.Scene {
     // Green overlay
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x004400, 0.8);
 
-    // Level Complete text
-    const completeText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 100, 'LEVEL COMPLETE!', {
+    // Level Complete text (shows which level was just cleared)
+    const cleared = Math.max(1, this.settings.levelNumber - 1);
+    const completeText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 100, `LEVEL ${cleared} COMPLETE!`, {
       fontSize: '56px',
       color: '#44FF44',
       fontStyle: 'bold',
@@ -72,7 +70,7 @@ export class LevelCompleteScene extends Phaser.Scene {
     livesText.setOrigin(0.5);
 
     // Continue prompt
-    const continueText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 100, 'Press JUMP to continue', {
+    const continueText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 100, `Press JUMP for Level ${this.settings.levelNumber}`, {
       fontSize: '24px',
       color: '#ffffff',
       stroke: '#000000',
@@ -104,6 +102,14 @@ export class LevelCompleteScene extends Phaser.Scene {
     this.time.delayedCall(500, () => {
       this.canContinue = true;
     });
+
+    // Bot demo (no humans): auto-advance so the show goes on.
+    const allBots = this.settings.botMask
+      .slice(0, this.settings.playerCount)
+      .every(Boolean);
+    if (allBots) {
+      this.time.delayedCall(2500, () => this.continueGame());
+    }
   }
 
   update(): void {
@@ -123,10 +129,6 @@ export class LevelCompleteScene extends Phaser.Scene {
 
   private continueGame(): void {
     this.canContinue = false; // Prevent double-trigger
-    this.scene.start('GameScene', {
-      playerStates: this.playerStates,
-      lives: this.lives,
-      coins: this.coins,
-    });
+    this.scene.start('GameScene', this.settings);
   }
 }

@@ -13,6 +13,10 @@ import { generateLevel } from '../levels/ProceduralGenerator';
 import { generateHybridLevel } from '../levels/HybridGenerator';
 import { EnemyType } from '../levels/types';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config';
+import { BotController } from '../systems/BotController';
+import type { Threat } from '../systems/BotController';
+import { buildSettings, parseSettingsFromURL } from '../settings';
+import type { GameSettings, PlayerState } from '../settings';
 
 // Tethered camera settings
 const MAX_PLAYER_DISTANCE = 900;
@@ -24,20 +28,6 @@ const ZOOM_DISTANCE_THRESHOLD = 500;
 // Stomp bounce velocity
 const STOMP_BOUNCE = -300;
 
-// Player state for persistence between levels
-interface PlayerState {
-  health: number;
-  isPoweredUp: boolean;
-}
-
-// Game settings - can be passed via scene data
-interface GameSettings {
-  playerCount?: number;
-  playerStates?: PlayerState[];
-  lives?: number;
-  coins?: number;
-}
-
 export class GameScene extends Phaser.Scene {
   private players: Player[] = [];
   private enemies: Enemy[] = [];
@@ -48,12 +38,15 @@ export class GameScene extends Phaser.Scene {
   private powerUps: PowerUp[] = [];
   private inputManager!: InputManager;
   private levelLoader!: LevelLoader;
+  private settings!: GameSettings;
+  private botControllers: (BotController | null)[] = [];
   private playerCount: number = 1; // Default to 1 player
   private initialPlayerStates: PlayerState[] = []; // For level persistence
 
   // Game state
   private coinCount: number = 0;
   private lives: number = 3;
+  private levelText!: Phaser.GameObjects.Text;
 
   // UI
   private debugText!: Phaser.GameObjects.Text;
@@ -64,6 +57,7 @@ export class GameScene extends Phaser.Scene {
 
   // Level exit
   private exitSprite: Phaser.GameObjects.Sprite | null = null;
+  private exitTrigger: Phaser.GameObjects.GameObject | null = null;
   private playersFinished: Set<Player> = new Set();
   private levelCompleteCountdown: number = -1;
   private countdownText: Phaser.GameObjects.Text | null = null;
@@ -76,16 +70,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   init(data: Partial<GameSettings>): void {
-    // Get player count from scene data, URL param, or default
-    if (data.playerCount) {
-      this.playerCount = data.playerCount;
-    } else {
-      // Check URL parameter: ?players=1 or ?players=2
-      const urlParams = new URLSearchParams(window.location.search);
-      const playersParam = urlParams.get('players');
-      this.playerCount = playersParam ? parseInt(playersParam, 10) : 1;
-    }
-    this.playerCount = Math.max(1, Math.min(2, this.playerCount)); // Clamp 1-2
+    // Settings arrive from the title screen / level transition. If the scene was
+    // entered directly (old URL, hot reload), fall back to URL params / defaults.
+    this.settings = (data && typeof data.playerCount === 'number')
+      ? buildSettings(data)
+      : buildSettings(parseSettingsFromURL());
+
+    this.playerCount = this.settings.playerCount;
 
     // Reset level completion state
     this.playersFinished = new Set();
@@ -101,56 +92,63 @@ export class GameScene extends Phaser.Scene {
     this.questionBlocks = [];
     this.powerUps = [];
     this.healthBars = [];
+    this.botControllers = [];
     this.exitSprite = null;
+    this.exitTrigger = null;
 
     // Reset camera target to avoid stale position from previous level
     this.cameraTarget = new Phaser.Math.Vector2();
 
     // Use persisted game state if coming from level complete, otherwise reset
-    this.coinCount = data.coins ?? 0;
-    this.lives = data.lives ?? 3;
-    this.initialPlayerStates = data.playerStates ?? [];
+    this.coinCount = this.settings.coins;
+    this.lives = this.settings.lives;
+    this.initialPlayerStates = this.settings.playerStates;
 
-    console.log(`Starting game with ${this.playerCount} player(s)`);
+    console.log(
+      `Level ${this.settings.levelNumber}: ${this.playerCount}p, ` +
+      `mode=${this.settings.genMode}, bots=[${this.settings.botMask}]`,
+    );
   }
 
   create(): void {
-    // Check URL params for level selection and generation mode
+    // Seed (if any) still comes from the URL for reproducible levels.
     const urlParams = new URLSearchParams(window.location.search);
-    const levelName = urlParams.get('level'); // e.g., ?level=smb1_1
-    const useHybrid = urlParams.get('hybrid') === 'true';
-    const useProcedural = urlParams.get('procedural') === 'true';
-    const seed = urlParams.get('seed');
-    const difficulty = urlParams.get('difficulty');
+    const seedParam = urlParams.get('seed');
+    // Vary the seed by level number so an endless run keeps producing fresh levels
+    // even when a fixed seed is supplied.
+    const seed = seedParam !== null
+      ? parseInt(seedParam, 10) + this.settings.levelNumber * 1000
+      : undefined;
 
     // Initialize level loader and load level
     this.levelLoader = new LevelLoader(this);
 
-    if (useHybrid) {
-      // Hybrid generation: hand-crafted chunks + procedural bridges
-      const hybridLevel = generateHybridLevel(
-        seed ? parseInt(seed, 10) : undefined,
-        { difficulty: difficulty ? parseInt(difficulty, 10) : 5 }
-      );
-      this.levelLoader.load(hybridLevel);
-      console.log('Loaded hybrid level');
-    } else if (useProcedural) {
-      // Pure procedural generation (sparse, original algorithm)
-      const proceduralLevel = generateLevel(seed ? parseInt(seed, 10) : undefined);
-      this.levelLoader.load(proceduralLevel);
+    if (this.settings.genMode === 'procedural') {
+      this.levelLoader.load(generateLevel(seed, { difficulty: this.settings.difficulty }));
       console.log('Loaded procedural level');
-    } else {
-      // Load named level from registry (defaults to level1)
-      const level = getLevel(levelName || 'level1');
+    } else if (this.settings.genMode === 'named') {
+      const level = getLevel(this.settings.levelName || 'level1');
       this.levelLoader.load(level);
       console.log(`Loaded level: ${level.name}`);
+    } else {
+      // Default: hybrid generation (hand-crafted moments + procedural bridges)
+      this.levelLoader.load(
+        generateHybridLevel(seed, { difficulty: this.settings.difficulty }),
+      );
+      console.log('Loaded hybrid level');
     }
+
+    // Decorative parallax background (clouds, hills, bushes)
+    this.createBackground();
 
     // Initialize input manager
     this.inputManager = new InputManager(this);
 
     // Create players at spawn points
     this.createPlayers();
+
+    // Attach AI controllers to any bot-controlled players
+    this.createBots();
 
     // Create enemies at spawn points
     this.createEnemies();
@@ -316,7 +314,7 @@ export class GameScene extends Phaser.Scene {
       this.updateHealthUI();
 
       if (isDead) {
-        this.handlePlayerDeath(player);
+        this.loseLife(player, this.players.indexOf(player));
       }
     }
   }
@@ -347,7 +345,7 @@ export class GameScene extends Phaser.Scene {
       this.updateHealthUI();
 
       if (isDead) {
-        this.handlePlayerDeath(player);
+        this.loseLife(player, this.players.indexOf(player));
       }
     }
   }
@@ -648,21 +646,38 @@ export class GameScene extends Phaser.Scene {
     if (!exit) return;
 
     const pos = this.levelLoader.gridToPixel(exit.x, exit.y);
-    const texture = exit.type === 'flagpole' ? 'flagpole' : 'door';
 
-    // Adjust Y position based on exit type
-    const yOffset = exit.type === 'flagpole' ? -48 : -16;
-    this.exitSprite = this.add.sprite(pos.x, pos.y + yOffset, texture);
-    this.exitSprite.setDepth(3);
+    if (exit.type === 'flagpole') {
+      // Stand the flagpole ON the ground so it reads as reachable. Scan down from
+      // the exit cell to find the surface beneath it.
+      const worldH = this.levelLoader.getWorldSize().height;
+      let surfaceY = worldH - 64;
+      for (let y = pos.y; y < worldH; y += 8) {
+        if (this.isSolidAt(pos.x, y)) { surfaceY = y; break; }
+      }
+      // Flagpole texture is 128 tall with a centered origin; base rests at surface.
+      this.exitSprite = this.add.sprite(pos.x, surfaceY - 64, 'flagpole');
+      this.exitSprite.setDepth(3);
 
-    // Add physics for overlap detection
-    this.physics.add.existing(this.exitSprite, true);
+      // The trigger is a TALL invisible column from the ground up past the end
+      // staircase, so a player completes whether they walk into the flag at ground
+      // level OR sail off the top of the staircase above it.
+      const zoneH = 13 * 32;
+      const zone = this.add.rectangle(pos.x, surfaceY - zoneH / 2, 36, zoneH, 0x00ff00, 0);
+      this.physics.add.existing(zone, true);
+      this.exitTrigger = zone;
+    } else {
+      this.exitSprite = this.add.sprite(pos.x, pos.y - 16, 'door');
+      this.exitSprite.setDepth(3);
+      this.physics.add.existing(this.exitSprite, true);
+      this.exitTrigger = this.exitSprite;
+    }
 
     // Set up player-exit overlap
     this.players.forEach((player) => {
       this.physics.add.overlap(
         player,
-        this.exitSprite!,
+        this.exitTrigger!,
         () => {
           if (!player.getIsInBubble()) {
             this.handlePlayerReachedExit(player);
@@ -731,23 +746,99 @@ export class GameScene extends Phaser.Scene {
   private completeLevel(): void {
     // Prevent multiple triggers
     this.levelCompleteCountdown = -1;
+    if (this.exitTrigger && this.exitTrigger !== this.exitSprite) {
+      this.exitTrigger.destroy();
+    }
+    this.exitTrigger = null;
     if (this.exitSprite) {
       this.exitSprite.destroy();
       this.exitSprite = null;
     }
 
-    // Gather player states for persistence
-    const playerStates = this.players.map(player => ({
-      health: player.getHealth(),
-      isPoweredUp: player.getIsPoweredUp(),
-    }));
-
-    // Show level complete and go to next level or restart
+    // Advance the endless run to the next level.
     this.scene.start('LevelCompleteScene', {
       coins: this.coinCount,
       lives: this.lives,
-      playerStates,
+      settings: this.buildCarrySettings(true),
     });
+  }
+
+  private createBackground(): void {
+    const { width, height } = this.levelLoader.getWorldSize();
+    const groundTop = height - 64; // top of the 2-tile ground band
+
+    // Clouds (far parallax)
+    for (let x = 120; x < width; x += 340) {
+      const step = Math.floor(x / 340);
+      this.add.image(x, 60 + (step % 3) * 46, 'cloud')
+        .setScrollFactor(0.35).setDepth(-12).setAlpha(0.95)
+        .setScale(0.8 + (step % 2) * 0.5);
+    }
+    // Hills (mid parallax)
+    for (let x = 220; x < width; x += 540) {
+      this.add.image(x, groundTop, 'hill')
+        .setOrigin(0.5, 1).setScrollFactor(0.6).setDepth(-11).setScale(2.6);
+    }
+    // Bushes planted on actual ground (near, moves with the world)
+    for (let x = 360; x < width; x += 280) {
+      if (!this.isSolidAt(x, groundTop + 16)) continue;
+      this.add.image(x, groundTop, 'bush')
+        .setOrigin(0.5, 1).setScrollFactor(1).setDepth(-10);
+    }
+  }
+
+  private createBots(): void {
+    const exit = this.levelLoader.getExit();
+    const worldSize = this.levelLoader.getWorldSize();
+    const exitX = exit
+      ? this.levelLoader.gridToPixel(exit.x, exit.y).x
+      : worldSize.width;
+
+    this.players.forEach((player, index) => {
+      if (!this.settings.botMask[index]) {
+        this.botControllers[index] = null;
+        return;
+      }
+      this.botControllers[index] = new BotController(player, {
+        isSolidAt: (x, y) => this.isSolidAt(x, y),
+        getThreats: () => this.getThreats(),
+        exitX,
+        worldHeight: worldSize.height,
+        getLeader: () => this.getHumanLeader(player),
+        isInBubble: () => player.getIsInBubble(),
+      });
+    });
+  }
+
+  // The CPU buddy follows the first human player so it never bullies them
+  // off-screen. Returns null when there's no human to follow (e.g. bot demo).
+  private getHumanLeader(self: Player): Phaser.GameObjects.Components.Transform | null {
+    for (let i = 0; i < this.players.length; i++) {
+      if (this.settings.botMask[i]) continue;
+      const p = this.players[i];
+      if (p !== self && p.active) return p;
+    }
+    return null;
+  }
+
+  private getThreats(): Threat[] {
+    const out: Threat[] = [];
+    for (const e of this.enemies) out.push({ x: e.x, y: e.y, alive: e.isAlive() });
+    for (const b of this.bulls) out.push({ x: b.x, y: b.y, alive: b.isAlive() });
+    return out;
+  }
+
+  // Is there solid level geometry at this world point? Used by the bot to sniff
+  // gaps and walls. Queries static physics bodies (ground/platforms/pipes/bricks/
+  // question blocks) and ignores the exit sprite.
+  private isSolidAt(x: number, y: number): boolean {
+    const bodies = this.physics.overlapRect(x - 1, y - 1, 2, 2, false, true) as
+      Phaser.Physics.Arcade.Body[];
+    for (const b of bodies) {
+      if (this.exitTrigger && b.gameObject === this.exitTrigger) continue;
+      return true;
+    }
+    return false;
   }
 
   private setupCamera(): void {
@@ -779,6 +870,18 @@ export class GameScene extends Phaser.Scene {
     });
     this.livesText.setScrollFactor(0);
     this.livesText.setDepth(100);
+
+    // Level counter (top center)
+    this.levelText = this.add.text(GAME_WIDTH / 2, 46, `Level ${this.settings.levelNumber}`, {
+      fontSize: '22px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 4,
+    });
+    this.levelText.setOrigin(0.5, 0);
+    this.levelText.setScrollFactor(0);
+    this.levelText.setDepth(100);
 
     // Debug text (below lives)
     this.debugText = this.add.text(10, 60, '', {
@@ -846,22 +949,45 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private handlePlayerDeath(player: Player): void {
-    const playerIndex = this.players.indexOf(player);
+  // Snapshot the running state to carry into the next scene (level / game over).
+  private buildCarrySettings(advanceLevel: boolean): GameSettings {
+    const playerStates: PlayerState[] = this.players.map(p => ({
+      health: p.getHealth(),
+      isPoweredUp: p.getIsPoweredUp(),
+    }));
+    return {
+      ...this.settings,
+      botMask: this.settings.botMask.slice(),
+      lives: this.lives,
+      coins: this.coinCount,
+      playerStates,
+      levelNumber: this.settings.levelNumber + (advanceLevel ? 1 : 0),
+    };
+  }
+
+  private repositionToSpawn(player: Player, index: number): void {
+    const spawns = this.levelLoader.getPlayerSpawns();
+    const spawn = spawns[index] || spawns[0];
+    const pos = this.levelLoader.gridToPixel(spawn.x, spawn.y);
+    player.setPosition(pos.x, pos.y);
+    (player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+    if (player.getIsInBubble()) player.exitBubble();
+  }
+
+  private loseLife(player: Player, index: number): void {
     this.lives--;
     this.updateLivesUI();
 
     if (this.lives <= 0) {
-      // Game over
       this.scene.start('GameOverScene', {
         coins: this.coinCount,
+        settings: this.buildCarrySettings(false),
       });
       return;
     }
 
-    // Respawn with full health
     player.resetHealth();
-    this.respawnPlayer(player, playerIndex);
+    this.repositionToSpawn(player, index);
     this.updateHealthUI();
   }
 
@@ -875,7 +1001,8 @@ export class GameScene extends Phaser.Scene {
     // Update players and handle bubble input
     this.players.forEach((player, index) => {
       if (!player.active) return;
-      const input = this.inputManager.getInput(index);
+      const bot = this.botControllers[index];
+      const input = bot ? bot.getInput(time) : this.inputManager.getInput(index);
 
       // Manual bubble: press Q (P1) or / (P2) or X button on controller
       if (input.bubbleJustPressed && !player.getIsInBubble()) {
@@ -926,48 +1053,51 @@ export class GameScene extends Phaser.Scene {
     const deathY = worldSize.height + 100; // A bit below the world
 
     this.players.forEach((player, index) => {
-      if (player.y > deathY && !player.getIsInBubble()) {
-        // Player fell out of the world - respawn them
-        this.respawnPlayer(player, index);
+      if (!player.active || player.getIsInBubble()) return;
+      if (player.y <= deathY) return;
+
+      // Forgiving co-op: if a partner is still in play, the fallen player pops
+      // back in a bubble right next to them — no life lost (classic NSMB rescue).
+      const anchor = this.findRescueAnchor(player);
+      if (anchor) {
+        player.setPosition(anchor.x, anchor.y - 90);
+        (player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+        player.enterBubble();
+      } else {
+        // Solo, or everyone is down — costs a life.
+        this.loseLife(player, index);
       }
     });
   }
 
-  private respawnPlayer(player: Player, index: number): void {
-    // Lose a life
-    this.lives--;
-    this.updateLivesUI();
-
-    if (this.lives <= 0) {
-      // Game over - restart scene
-      console.log('Game Over!');
-      this.scene.restart();
-      return;
+  // A partner that can rescue a fallen player: alive, on-screen (not fallen),
+  // not bubbled, and not already finished.
+  private findRescueAnchor(self: Player): Player | null {
+    const deathY = this.levelLoader.getWorldSize().height + 100;
+    for (const p of this.players) {
+      if (p === self || !p.active) continue;
+      if (p.getIsInBubble() || this.playersFinished.has(p)) continue;
+      if (p.y > deathY) continue;
+      return p;
     }
+    return null;
+  }
 
-    const spawns = this.levelLoader.getPlayerSpawns();
-    const spawn = spawns[index] || spawns[0];
-    const pos = this.levelLoader.gridToPixel(spawn.x, spawn.y);
-
-    // Reset player position and velocity
-    player.setPosition(pos.x, pos.y);
-    const body = player.body as Phaser.Physics.Arcade.Body;
-    body.setVelocity(0, 0);
-
-    // Exit bubble if in one
-    if (player.getIsInBubble()) {
-      player.exitBubble();
-    }
-
-    console.log(`Player ${index + 1} respawned. Lives: ${this.lives}`);
+  // Players who are live and on the field: active, not bubbled, not finished.
+  // Used for camera follow and as bubble-rescue seek targets so we never track a
+  // frozen player parked at the exit flag.
+  private livePlayers(): Player[] {
+    return this.players.filter(
+      p => p.active && !p.getIsInBubble() && !this.playersFinished.has(p),
+    );
   }
 
   private updateBubbleTargets(): void {
-    const activePlayers = this.players.filter(p => !p.getIsInBubble());
+    const live = this.livePlayers();
     const bubbledPlayers = this.players.filter(p => p.getIsInBubble());
 
-    if (activePlayers.length > 0 && bubbledPlayers.length > 0) {
-      const target = new Phaser.Math.Vector2(activePlayers[0].x, activePlayers[0].y);
+    if (live.length > 0 && bubbledPlayers.length > 0) {
+      const target = new Phaser.Math.Vector2(live[0].x, live[0].y);
       bubbledPlayers.forEach(p => p.setSeekTarget(target));
     } else {
       this.players.forEach(p => p.setSeekTarget(null));
@@ -999,15 +1129,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateCamera(delta: number): void {
-    const activePlayers = this.players.filter(p => !p.getIsInBubble());
-
     let targetX = 0;
     let targetY = 0;
     let count = 0;
     let minX = Infinity;
     let maxX = -Infinity;
 
-    const playersToFollow = activePlayers.length > 0 ? activePlayers : this.players;
+    // Follow the live players; fall back to all of them if none are live yet.
+    const live = this.livePlayers();
+    const playersToFollow = live.length > 0 ? live : this.players;
 
     playersToFollow.forEach((player) => {
       targetX += player.x;

@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-13
+
+### Added
+
+- **Title screen** with mode select: 2 Players (co-op), 1 Player + CPU Buddy, 1 Player, and Bot Demo. Keyboard + gamepad navigation.
+- **AI bot** (`BotController`) that plays via the same input path as a human — runs, jumps gaps/walls/enemies, climbs stairs, backs up for a running start when pinned, and follows a human partner without bullying them forward. Powers the CPU buddy, the attract-mode Bot Demo, and serves as an automated playtester.
+- **Endless easy run** by default: two players, hybrid generation at difficulty 2, fresh level every time you clear the flag, with a Level counter.
+- **Forgiving co-op deaths**: falling into a pit with a living partner re-bubbles you next to them at no life cost (NSMB-style rescue).
+- **Parallax background** (clouds, hills, ground bushes) so levels feel alive instead of empty.
+- Shared `GameSettings` plumbed through every scene; URL overrides (`?mode=`, `?bot=`, `?difficulty=`, `?autostart=1`) for power users and testing.
+
+### Changed
+
+- Difficulty now drives generation: easy levels get smaller/rarer gaps, fewer enemies, more coins, and a capped chunk pool. Default difficulty lowered to 2.
+- Question blocks contain power-ups slightly more often (35%).
+
+### Fixed
+
+- Hybrid bridges built one floor 2 tiles too tall, creating an unclimbable wall where the start zone met the first bridge — floors are now flush with their neighbours.
+- The end flagpole's trigger floated overhead and could be missed entirely; it now spans the full approach height so the level completes whether you walk into it or sail off the staircase.
+- Camera and bubble-rescue now ignore players frozen at the exit instead of yanking toward the finished player.
+- Enemy/fall death handling no longer double-counts lives.
+
 ## [0.4.0] - 2026-01-04
 
 ### Added

@@ -38,8 +38,8 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    console.log('BootScene complete, starting GameScene');
-    this.scene.start('GameScene');
+    console.log('BootScene complete, starting TitleScene');
+    this.scene.start('TitleScene');
   }
 
   private createPlaceholderSprites(): void {
@@ -245,6 +245,38 @@ export class BootScene extends Phaser.Scene {
     platformGraphics.fillRect(2, 2, 28, 6); // Top highlight
     platformGraphics.generateTexture('platform', 32, 32);
     platformGraphics.destroy();
+
+    // Cloud (soft white puff) - background decoration
+    const cloudGraphics = this.make.graphics({ x: 0, y: 0 });
+    cloudGraphics.fillStyle(0xffffff, 1);
+    cloudGraphics.fillCircle(26, 34, 20);
+    cloudGraphics.fillCircle(52, 28, 26);
+    cloudGraphics.fillCircle(82, 34, 22);
+    cloudGraphics.fillCircle(40, 44, 22);
+    cloudGraphics.fillCircle(70, 44, 22);
+    cloudGraphics.fillStyle(0xeaf4ff, 1);
+    cloudGraphics.fillRect(18, 46, 74, 10);
+    cloudGraphics.generateTexture('cloud', 108, 60);
+    cloudGraphics.destroy();
+
+    // Hill (rounded green mound) - background decoration
+    const hillGraphics = this.make.graphics({ x: 0, y: 0 });
+    hillGraphics.fillStyle(0x3aa64a, 1);
+    hillGraphics.fillEllipse(60, 70, 120, 90);
+    hillGraphics.fillStyle(0x2f8c3e, 1);
+    hillGraphics.fillEllipse(60, 78, 120, 70);
+    hillGraphics.generateTexture('hill', 120, 80);
+    hillGraphics.destroy();
+
+    // Bush (small green tuft) - foreground decoration
+    const bushGraphics = this.make.graphics({ x: 0, y: 0 });
+    bushGraphics.fillStyle(0x2f8c3e, 1);
+    bushGraphics.fillCircle(16, 24, 14);
+    bushGraphics.fillCircle(34, 20, 16);
+    bushGraphics.fillCircle(52, 24, 14);
+    bushGraphics.fillRect(2, 24, 64, 12);
+    bushGraphics.generateTexture('bush', 68, 38);
+    bushGraphics.destroy();
 
     // Power-up mushroom (red cap with white spots)
     const mushroomGraphics = this.make.graphics({ x: 0, y: 0 });
