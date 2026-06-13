@@ -25,3 +25,6 @@ dist-ssr
 
 # Playwright MCP test artifacts
 .playwright-mcp/
+
+# Local screenshot scratch
+/*.png

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config';
 import { buildSettings, DEFAULT_SETTINGS } from '../settings';
 import type { GameSettings } from '../settings';
+import { audio } from '../systems/AudioSynth';
 
 interface GameOverData {
   coins: number;
@@ -24,6 +25,8 @@ export class GameOverScene extends Phaser.Scene {
 
   create(): void {
     this.canRestart = false;
+    audio.stopMusic();
+    audio.gameOver();
 
     // Dark overlay
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.8);
@@ -39,7 +42,8 @@ export class GameOverScene extends Phaser.Scene {
     gameOverText.setOrigin(0.5);
 
     // Stats
-    const statsText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, `Coins collected: ${this.coins}`, {
+    const statsText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2,
+      `Score: ${this.settings.score}      Coins: ${this.coins}`, {
       fontSize: '32px',
       color: '#FFD700',
       stroke: '#000000',

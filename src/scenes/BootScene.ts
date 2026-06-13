@@ -1,301 +1,432 @@
 import Phaser from 'phaser';
+import { audio } from '../systems/AudioSynth';
+
+// ---------------------------------------------------------------------------
+// Pixel-art texture generation.
+//
+// The whole game draws itself in code. Characters and props are authored here as
+// little pixel maps (arrays of strings, one char per pixel) and rasterized into
+// Phaser textures. With `pixelArt: true` they stay crisp at any zoom. Editing a
+// sprite is just editing the ASCII — no asset pipeline.
+// ---------------------------------------------------------------------------
+
+type Palette = Record<string, number | null>;
+
+// Shared character palette. Cap (C/c) and overalls (O/o) are overridden per hero.
+const BASE: Palette = {
+  '.': null, ' ': null,
+  K: 0x161325, // outline
+  F: 0xffcf9c, // skin
+  f: 0xe0a673, // skin shadow
+  E: 0xffffff, // eye white
+  P: 0x2a2740, // pupil
+  X: 0x2a2740, // hurt eye (X)
+  m: 0x9e3b2a, // mouth
+  B: 0x49301c, // boot
+  b: 0x3a2616, // boot shade
+  G: 0xfff6e9, // glove
+};
+
+const P1_COLORS: Palette = { C: 0xe83b32, c: 0xa51f1a, O: 0x2f6fd8, o: 0x1f4aa0 };
+const P2_COLORS: Palette = { C: 0x39c46a, c: 0x1f8a45, O: 0x8a4fd6, o: 0x5d2f9b };
+
+// Hero head + body (rows 0-18). Legs are swapped per animation frame.
+const HERO_HEAD = [
+  '................',
+  '....KKKKKKKK....',
+  '...KCCCCCCCCK...',
+  '..KCCCCCCCCCCK..',
+  '..KCCCCCCCCCCK..',
+  '..KKKKKKKKKKKK..',
+  '...FFFFFFFFFF...',
+  '..FFFFFFFFFFFF..',
+  '..FFEEFFFFEEFF..',
+  '..FFEPFFFFEPFF..',
+  '..FFFFFFFFFFFF..',
+  '..FFFFmmmmFFFF..',
+  '...ffFFFFFFff...',
+  '....KKKKKKKK....',
+  '...KOOOOOOOOK...',
+  '..GKOoOOOOoOKG..',
+  '..GKOoOOOOoOKG..',
+  '...KOOOOOOOOK...',
+  '...KOOOOOOOOK...',
+];
+
+const HERO_HEAD_HURT = HERO_HEAD.map((row, i) => {
+  if (i === 8) return '..FFXXFFFFXXFF..';
+  if (i === 9) return '..FFXXFFFFXXFF..';
+  if (i === 11) return '..FFFmmmmmmFFF..';
+  return row;
+});
+
+const LEGS_IDLE = [
+  '...KOOOOOOOOK...',
+  '...KKBBBBBBKK...',
+  '..KBBBBBBBBBBK..',
+  '..KBBBK..KBBBK..',
+  '...KKK....KKK...',
+];
+const LEGS_WALK_A = [
+  '...KOOOOOOOOK...',
+  '...KKBBBBBBKK...',
+  '.KBBBBBBBBBBK...',
+  '.KBBBK...KBBBK..',
+  '..KKK......KKK..',
+];
+const LEGS_WALK_B = [
+  '...KOOOOOOOOK...',
+  '...KKBBBBBBKK...',
+  '...KBBBBBBBBK...',
+  '...KBBBKBBBK....',
+  '....KKKKKK.....',
+];
+const LEGS_JUMP = [
+  '...KOOOOOOOOK...',
+  '..KKBBBBBBBBKK..',
+  '.KBBBK....KBBBK.',
+  '.KKK........KKK.',
+  '...............',
+];
+
+const hero = (legs: string[]) => [...HERO_HEAD, ...legs];
+const heroHurt = (legs: string[]) => [...HERO_HEAD_HURT, ...legs];
+
+// Cute angry critter (goomba replacement) — two walk frames + a squashed frame.
+const CRIT: Palette = {
+  '.': null, K: 0x161325, M: 0xb0673a, m: 0x894d28, E: 0xffffff, P: 0x2a2740, t: 0xfff4e2,
+};
+const CRITTER_1 = [
+  '................',
+  '.....KKKKKK.....',
+  '...KKMMMMMMKK...',
+  '..KMMMMMMMMMMK..',
+  '..KMKKMMMMKKMK..',
+  '..KMMEEMMEEMMK..',
+  '..KMMEPMMEPMMK..',
+  '..KMMMMMMMMMMK..',
+  '..KMmMttttMmMK..',
+  '..KMmMMMMMMmMK..',
+  '...KMMMMMMMMK...',
+  '...KMMMMMMMMK...',
+  '..KbbMMMMMMbbK..',
+  '..KBBK....KBBK..',
+  '...KK......KK...',
+  '................',
+];
+const CRITTER_2 = [
+  '................',
+  '.....KKKKKK.....',
+  '...KKMMMMMMKK...',
+  '..KMMMMMMMMMMK..',
+  '..KMKKMMMMKKMK..',
+  '..KMMEEMMEEMMK..',
+  '..KMMEPMMEPMMK..',
+  '..KMMMMMMMMMMK..',
+  '..KMmMttttMmMK..',
+  '..KMmMMMMMMmMK..',
+  '...KMMMMMMMMK...',
+  '...KMMMMMMMMK...',
+  '...KbbMMMMbbK...',
+  '...KBBK..KBBK...',
+  '..KK........KK..',
+  '................',
+];
+// extend CRIT palette with boot colors
+CRIT.b = 0x5a3318;
+CRIT.B = 0x49301c;
+
+const MUSH: Palette = {
+  '.': null, K: 0x161325, R: 0xff5a4d, r: 0xc6261d, W: 0xffffff, S: 0xfff1d6, s: 0xe6c89b, P: 0x2a2740,
+};
+const MUSHROOM = [
+  '................',
+  '....KKKKKKKK....',
+  '..KKRRRRRRRRKK..',
+  '.KRRWWRRRRWWRRK.',
+  '.KRWWWRRRRWWWRK.',
+  '.KRRRRRRRRRRRRK.',
+  '.KRRRWWRRWWRRRK.',
+  '.KrRRWWRRWWRRrK.',
+  '..KKKKKKKKKKKK..',
+  '...KSSSSSSSSK...',
+  '...KSPSSSSPSK...',
+  '...KSSSSSSSSK...',
+  '...KSsSSSSsSK...',
+  '...KSSSSSSSSK...',
+  '....KKKKKKKK....',
+  '................',
+];
+
+// ---------------------------------------------------------------------------
 
 export class BootScene extends Phaser.Scene {
   constructor() {
     super({ key: 'BootScene' });
   }
 
-  preload(): void {
-    // Show loading progress
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-
-    const progressBar = this.add.graphics();
-    const progressBox = this.add.graphics();
-    progressBox.fillStyle(0x222222, 0.8);
-    progressBox.fillRect(width / 2 - 160, height / 2 - 25, 320, 50);
-
-    const loadingText = this.add.text(width / 2, height / 2 - 50, 'Loading...', {
-      fontSize: '20px',
-      color: '#ffffff',
-    });
-    loadingText.setOrigin(0.5, 0.5);
-
-    this.load.on('progress', (value: number) => {
-      progressBar.clear();
-      progressBar.fillStyle(0x88ff88, 1);
-      progressBar.fillRect(width / 2 - 150, height / 2 - 15, 300 * value, 30);
-    });
-
-    this.load.on('complete', () => {
-      progressBar.destroy();
-      progressBox.destroy();
-      loadingText.destroy();
-    });
-
-    // Generate placeholder sprites programmatically
-    this.createPlaceholderSprites();
-  }
-
   create(): void {
-    console.log('BootScene complete, starting TitleScene');
+    audio.install();
+    this.buildTextures();
+    this.buildAnims();
     this.scene.start('TitleScene');
   }
 
-  private createPlaceholderSprites(): void {
-    // Player 1 sprite (orange)
-    const player1Graphics = this.make.graphics({ x: 0, y: 0 });
-    player1Graphics.fillStyle(0xFF8C00); // Dark orange
-    player1Graphics.fillRoundedRect(0, 0, 32, 48, 4);
-    player1Graphics.fillStyle(0xffffff);
-    player1Graphics.fillCircle(10, 12, 4); // Left eye
-    player1Graphics.fillCircle(22, 12, 4); // Right eye
-    player1Graphics.generateTexture('player1', 32, 48);
-    player1Graphics.destroy();
+  // ---- pixel rasterizer ----------------------------------------------------
 
-    // Player 2 sprite (green)
-    const player2Graphics = this.make.graphics({ x: 0, y: 0 });
-    player2Graphics.fillStyle(0x44ff88);
-    player2Graphics.fillRoundedRect(0, 0, 32, 48, 4);
-    player2Graphics.fillStyle(0xffffff);
-    player2Graphics.fillCircle(10, 12, 4);
-    player2Graphics.fillCircle(22, 12, 4);
-    player2Graphics.generateTexture('player2', 32, 48);
-    player2Graphics.destroy();
+  private drawPixels(key: string, rows: string[], palette: Palette, scale = 2): void {
+    const g = this.make.graphics({ x: 0, y: 0 });
+    const w = rows[0].length;
+    const h = rows.length;
+    for (let y = 0; y < h; y++) {
+      const row = rows[y];
+      for (let x = 0; x < row.length; x++) {
+        const col = palette[row[x]];
+        if (col === undefined || col === null) continue;
+        g.fillStyle(col, 1);
+        g.fillRect(x * scale, y * scale, scale, scale);
+      }
+    }
+    g.generateTexture(key, w * scale, h * scale);
+    g.destroy();
+  }
 
-    // Ground tile (brown)
-    const groundGraphics = this.make.graphics({ x: 0, y: 0 });
-    groundGraphics.fillStyle(0x8B4513);
-    groundGraphics.fillRect(0, 0, 32, 32);
-    groundGraphics.lineStyle(2, 0x654321);
-    groundGraphics.strokeRect(0, 0, 32, 32);
-    groundGraphics.fillStyle(0x228B22);
-    groundGraphics.fillRect(0, 0, 32, 8); // Grass top
-    groundGraphics.generateTexture('ground', 32, 32);
-    groundGraphics.destroy();
+  private buildTextures(): void {
+    this.buildHeroes();
+    this.buildEnemies();
+    this.buildPickups();
+    this.buildTiles();
+    this.buildScenery();
+    this.buildParticles();
+  }
 
-    // Bubble sprite (for when player gets too far)
-    const bubbleGraphics = this.make.graphics({ x: 0, y: 0 });
-    bubbleGraphics.fillStyle(0xffffff, 0.3);
-    bubbleGraphics.fillCircle(24, 24, 24);
-    bubbleGraphics.lineStyle(2, 0xffffff, 0.6);
-    bubbleGraphics.strokeCircle(24, 24, 24);
-    bubbleGraphics.generateTexture('bubble', 48, 48);
-    bubbleGraphics.destroy();
+  private buildHeroes(): void {
+    const make = (prefix: string, colors: Palette) => {
+      const pal = { ...BASE, ...colors };
+      this.drawPixels(prefix, hero(LEGS_IDLE), pal);          // idle == base key
+      this.drawPixels(`${prefix}_walk1`, hero(LEGS_WALK_A), pal);
+      this.drawPixels(`${prefix}_walk2`, hero(LEGS_WALK_B), pal);
+      this.drawPixels(`${prefix}_jump`, hero(LEGS_JUMP), pal);
+      this.drawPixels(`${prefix}_hurt`, heroHurt(LEGS_IDLE), pal);
+    };
+    make('player1', P1_COLORS);
+    make('player2', P2_COLORS);
+  }
 
-    // Brick tile (orange/brown)
-    const brickGraphics = this.make.graphics({ x: 0, y: 0 });
-    brickGraphics.fillStyle(0xD2691E);
-    brickGraphics.fillRect(0, 0, 32, 32);
-    brickGraphics.lineStyle(2, 0x8B4513);
-    brickGraphics.strokeRect(0, 0, 32, 32);
-    brickGraphics.lineStyle(1, 0x8B4513);
-    brickGraphics.lineBetween(16, 0, 16, 32);
-    brickGraphics.lineBetween(0, 16, 32, 16);
-    brickGraphics.generateTexture('brick', 32, 32);
-    brickGraphics.destroy();
+  private buildEnemies(): void {
+    this.drawPixels('goomba', CRITTER_1, CRIT);
+    this.drawPixels('goomba_walk1', CRITTER_1, CRIT);
+    this.drawPixels('goomba_walk2', CRITTER_2, CRIT);
 
-    // Question block (yellow with ?)
-    const questionGraphics = this.make.graphics({ x: 0, y: 0 });
-    questionGraphics.fillStyle(0xFFD700);
-    questionGraphics.fillRect(0, 0, 32, 32);
-    questionGraphics.lineStyle(2, 0xDAA520);
-    questionGraphics.strokeRect(0, 0, 32, 32);
-    questionGraphics.generateTexture('question', 32, 32);
-    questionGraphics.destroy();
+    // Charging Bull — stocky, horned, drawn with graphics primitives (it's wide).
+    const g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x161325); g.fillRoundedRect(0, 8, 44, 26, 6);     // outline body
+    g.fillStyle(0xcc5a22); g.fillRoundedRect(2, 10, 40, 22, 5);    // body
+    g.fillStyle(0xa8461a); g.fillRoundedRect(2, 22, 40, 10, 5);    // belly shade
+    g.fillStyle(0x161325);                                         // horns
+    g.fillTriangle(2, 10, 7, -2, 12, 10);
+    g.fillTriangle(42, 10, 37, -2, 32, 10);
+    g.fillStyle(0xf2efe6);
+    g.fillTriangle(4, 9, 7, 1, 10, 9);
+    g.fillTriangle(40, 9, 37, 1, 34, 9);
+    g.fillStyle(0x3a2414);                                         // legs
+    g.fillRect(6, 30, 6, 6); g.fillRect(16, 30, 6, 6); g.fillRect(24, 30, 6, 6); g.fillRect(34, 30, 6, 6);
+    g.fillStyle(0xffffff); g.fillCircle(9, 17, 3); g.fillCircle(17, 17, 3);   // eyes
+    g.fillStyle(0xc0202a); g.fillCircle(9, 17, 1.4); g.fillCircle(17, 17, 1.4);
+    g.fillStyle(0x2a2740); g.fillRect(5, 12, 6, 2); g.fillRect(15, 12, 6, 2); // angry brows
+    g.fillStyle(0xffe08a); g.fillCircle(35, 24, 2); g.fillCircle(40, 22, 2);  // snort
+    g.generateTexture('bull', 44, 36);
+    g.destroy();
+  }
 
-    // Spike tile (red triangles)
-    const spikeGraphics = this.make.graphics({ x: 0, y: 0 });
-    spikeGraphics.fillStyle(0xFF4444);
-    spikeGraphics.fillTriangle(0, 32, 16, 0, 32, 32);
-    spikeGraphics.lineStyle(2, 0xAA0000);
-    spikeGraphics.strokeTriangle(0, 32, 16, 0, 32, 32);
-    spikeGraphics.generateTexture('spike', 32, 32);
-    spikeGraphics.destroy();
+  private buildPickups(): void {
+    // Spinning coin — 4 frames squeezing the ellipse like a flipping disc.
+    const widths = [22, 13, 4, 13];
+    widths.forEach((w, i) => {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x161325); g.fillEllipse(16, 16, w + 4, 28);
+      g.fillStyle(0xffd23f); g.fillEllipse(16, 16, w, 24);
+      if (w > 6) {
+        g.fillStyle(0xffe892); g.fillEllipse(16 - w * 0.18, 14, w * 0.4, 14);
+        g.fillStyle(0xd79a17); g.fillEllipse(16, 16, w * 0.5, 16);
+        g.fillStyle(0xffd23f); g.fillEllipse(16, 16, w * 0.36, 13);
+      }
+      g.generateTexture(i === 0 ? 'coin' : `coin${i}`, 32, 32);
+      g.destroy();
+    });
 
-    // Goomba enemy (brown mushroom-like)
-    const goombaGraphics = this.make.graphics({ x: 0, y: 0 });
-    goombaGraphics.fillStyle(0x8B4513);
-    goombaGraphics.fillRoundedRect(2, 8, 28, 24, 6);
-    goombaGraphics.fillStyle(0xDEB887);
-    goombaGraphics.fillRect(6, 24, 8, 8); // Left foot
-    goombaGraphics.fillRect(18, 24, 8, 8); // Right foot
-    goombaGraphics.fillStyle(0xffffff);
-    goombaGraphics.fillCircle(10, 16, 4); // Left eye
-    goombaGraphics.fillCircle(22, 16, 4); // Right eye
-    goombaGraphics.fillStyle(0x000000);
-    goombaGraphics.fillCircle(11, 16, 2); // Left pupil
-    goombaGraphics.fillCircle(23, 16, 2); // Right pupil
-    goombaGraphics.generateTexture('goomba', 32, 32);
-    goombaGraphics.destroy();
+    this.drawPixels('mushroom', MUSHROOM, MUSH);
+  }
 
-    // Charging Bull enemy (burnt orange, stocky with horns)
-    const bullGraphics = this.make.graphics({ x: 0, y: 0 });
-    // Body (burnt orange, wide and stocky)
-    bullGraphics.fillStyle(0xCC5500);
-    bullGraphics.fillRoundedRect(0, 10, 40, 20, 4);
-    // Head (slightly darker)
-    bullGraphics.fillStyle(0xAA4400);
-    bullGraphics.fillRoundedRect(0, 8, 14, 16, 3);
-    // Horns (dark gray)
-    bullGraphics.fillStyle(0x444444);
-    bullGraphics.fillTriangle(2, 8, 6, 0, 10, 8);   // Left horn
-    bullGraphics.fillTriangle(30, 8, 34, 0, 38, 8); // Right horn
-    // Legs (4 stubby legs)
-    bullGraphics.fillStyle(0x8B3300);
-    bullGraphics.fillRect(4, 26, 6, 6);   // Front left
-    bullGraphics.fillRect(14, 26, 6, 6);  // Front right
-    bullGraphics.fillRect(22, 26, 6, 6);  // Back left
-    bullGraphics.fillRect(32, 26, 6, 6);  // Back right
-    // Angry eyes (white with red tint)
-    bullGraphics.fillStyle(0xFFCCCC);
-    bullGraphics.fillCircle(4, 14, 3);  // Left eye
-    bullGraphics.fillCircle(10, 14, 3); // Right eye
-    // Pupils (black, looking forward)
-    bullGraphics.fillStyle(0x000000);
-    bullGraphics.fillCircle(5, 14, 1.5);  // Left pupil
-    bullGraphics.fillCircle(11, 14, 1.5); // Right pupil
-    // Nostrils (dark)
-    bullGraphics.fillStyle(0x331100);
-    bullGraphics.fillCircle(3, 20, 2);  // Left nostril
-    bullGraphics.fillCircle(9, 20, 2);  // Right nostril
-    bullGraphics.generateTexture('bull', 40, 32);
-    bullGraphics.destroy();
+  private buildTiles(): void {
+    // Ground — earthy with a grass crown and speckles.
+    let g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x7a4a23); g.fillRect(0, 0, 32, 32);
+    g.fillStyle(0x96673a); g.fillRect(0, 0, 32, 10);
+    g.fillStyle(0x57c54a); g.fillRect(0, 0, 32, 8);
+    g.fillStyle(0x3fa238); g.fillRect(0, 6, 32, 3);
+    g.fillStyle(0x6b3f1d);
+    g.fillRect(6, 16, 3, 3); g.fillRect(20, 14, 3, 3); g.fillRect(14, 24, 3, 3); g.fillRect(25, 22, 2, 2);
+    g.lineStyle(2, 0x3a2414); g.strokeRect(1, 1, 30, 30);
+    g.generateTexture('ground', 32, 32); g.destroy();
 
-    // Coin (yellow circle with shine)
-    const coinGraphics = this.make.graphics({ x: 0, y: 0 });
-    coinGraphics.fillStyle(0xFFD700);
-    coinGraphics.fillCircle(16, 16, 12);
-    coinGraphics.lineStyle(2, 0xDAA520);
-    coinGraphics.strokeCircle(16, 16, 12);
-    coinGraphics.fillStyle(0xFFFF00, 0.5);
-    coinGraphics.fillCircle(12, 12, 4); // Shine
-    coinGraphics.generateTexture('coin', 32, 32);
-    coinGraphics.destroy();
+    // Brick.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x2a1408); g.fillRect(0, 0, 32, 32);
+    g.fillStyle(0xc66a2e); g.fillRect(1, 1, 30, 14); g.fillRect(1, 17, 14, 14); g.fillRect(17, 17, 14, 14);
+    g.fillStyle(0xe08a4a); g.fillRect(1, 1, 30, 3); g.fillRect(1, 17, 14, 3); g.fillRect(17, 17, 14, 3);
+    g.generateTexture('brick', 32, 32); g.destroy();
 
-    // Flagpole (tall pole with flag)
-    const flagpoleGraphics = this.make.graphics({ x: 0, y: 0 });
-    // Pole
-    flagpoleGraphics.fillStyle(0x888888);
-    flagpoleGraphics.fillRect(14, 0, 4, 128);
-    // Ball on top
-    flagpoleGraphics.fillStyle(0xFFD700);
-    flagpoleGraphics.fillCircle(16, 6, 6);
-    // Flag
-    flagpoleGraphics.fillStyle(0x00AA00);
-    flagpoleGraphics.fillTriangle(18, 10, 18, 40, 48, 25);
-    flagpoleGraphics.generateTexture('flagpole', 48, 128);
-    flagpoleGraphics.destroy();
+    // Question block — beveled gold with a glowing "?".
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x161325); g.fillRoundedRect(0, 0, 32, 32, 4);
+    g.fillStyle(0xffc01e); g.fillRoundedRect(2, 2, 28, 28, 3);
+    g.fillStyle(0xffe27a); g.fillRoundedRect(2, 2, 28, 5, 2);
+    g.fillStyle(0xcf8e10); g.fillRoundedRect(2, 25, 28, 5, 2);
+    g.fillStyle(0xffffff);
+    g.fillRect(11, 9, 10, 3); g.fillRect(18, 11, 3, 4); g.fillRect(14, 15, 5, 3); g.fillRect(14, 18, 3, 3);
+    g.fillRect(14, 23, 3, 3); // dot
+    g.fillStyle(0x161325); g.fillCircle(6, 6, 1.4); g.fillCircle(26, 6, 1.4); g.fillCircle(6, 26, 1.4); g.fillCircle(26, 26, 1.4);
+    g.generateTexture('question', 32, 32); g.destroy();
 
-    // Door
-    const doorGraphics = this.make.graphics({ x: 0, y: 0 });
-    doorGraphics.fillStyle(0x8B4513);
-    doorGraphics.fillRect(0, 0, 32, 64);
-    doorGraphics.lineStyle(3, 0x654321);
-    doorGraphics.strokeRect(2, 2, 28, 60);
-    doorGraphics.fillStyle(0xFFD700);
-    doorGraphics.fillCircle(24, 32, 3); // Door knob
-    doorGraphics.generateTexture('door', 32, 64);
-    doorGraphics.destroy();
+    // Floating platform.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x161325); g.fillRoundedRect(0, 0, 32, 32, 4);
+    g.fillStyle(0xcd8f4f); g.fillRoundedRect(1, 1, 30, 30, 3);
+    g.fillStyle(0xe7bd86); g.fillRect(3, 3, 26, 6);
+    g.generateTexture('platform', 32, 32); g.destroy();
 
-    // Pipe (green SMB-style pipe)
-    const pipeGraphics = this.make.graphics({ x: 0, y: 0 });
-    // Main body (darker green)
-    pipeGraphics.fillStyle(0x228B22);
-    pipeGraphics.fillRect(0, 0, 32, 32);
-    // Left highlight
-    pipeGraphics.fillStyle(0x32CD32);
-    pipeGraphics.fillRect(2, 0, 6, 32);
-    // Right shadow
-    pipeGraphics.fillStyle(0x006400);
-    pipeGraphics.fillRect(26, 0, 4, 32);
-    // Border
-    pipeGraphics.lineStyle(1, 0x004400);
-    pipeGraphics.strokeRect(0, 0, 32, 32);
-    pipeGraphics.generateTexture('pipe', 32, 32);
-    pipeGraphics.destroy();
+    // Pipe body + top lip.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x0c4a16); g.fillRect(0, 0, 32, 32);
+    g.fillStyle(0x29a531); g.fillRect(2, 0, 28, 32);
+    g.fillStyle(0x6fe06a); g.fillRect(4, 0, 6, 32);
+    g.fillStyle(0x14761d); g.fillRect(24, 0, 6, 32);
+    g.generateTexture('pipe', 32, 32); g.destroy();
 
-    // Pipe top (slightly wider lip)
-    const pipeTopGraphics = this.make.graphics({ x: 0, y: 0 });
-    pipeTopGraphics.fillStyle(0x228B22);
-    pipeTopGraphics.fillRect(0, 4, 32, 28);
-    // Top lip extends slightly
-    pipeTopGraphics.fillStyle(0x32CD32);
-    pipeTopGraphics.fillRect(0, 0, 32, 8);
-    pipeTopGraphics.fillStyle(0x228B22);
-    pipeTopGraphics.fillRect(2, 2, 28, 4);
-    // Highlight
-    pipeTopGraphics.fillStyle(0x32CD32);
-    pipeTopGraphics.fillRect(2, 8, 6, 24);
-    // Shadow
-    pipeTopGraphics.fillStyle(0x006400);
-    pipeTopGraphics.fillRect(26, 8, 4, 24);
-    pipeTopGraphics.lineStyle(1, 0x004400);
-    pipeTopGraphics.strokeRect(0, 0, 32, 32);
-    pipeTopGraphics.generateTexture('pipe_top', 32, 32);
-    pipeTopGraphics.destroy();
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x0c4a16); g.fillRect(0, 6, 32, 26);
+    g.fillStyle(0x29a531); g.fillRect(2, 8, 28, 24);
+    g.fillStyle(0x6fe06a); g.fillRect(4, 8, 6, 24);
+    g.fillStyle(0x14761d); g.fillRect(24, 8, 6, 24);
+    g.fillStyle(0x0c4a16); g.fillRect(-2, 0, 36, 8);
+    g.fillStyle(0x29a531); g.fillRect(0, 2, 32, 6);
+    g.fillStyle(0x6fe06a); g.fillRect(2, 2, 8, 4);
+    g.generateTexture('pipe_top', 32, 32); g.destroy();
 
-    // Platform tile (for floating platforms - lighter brown)
-    const platformGraphics = this.make.graphics({ x: 0, y: 0 });
-    platformGraphics.fillStyle(0xCD853F);
-    platformGraphics.fillRect(0, 0, 32, 32);
-    platformGraphics.lineStyle(2, 0x8B4513);
-    platformGraphics.strokeRect(0, 0, 32, 32);
-    platformGraphics.fillStyle(0xDEB887);
-    platformGraphics.fillRect(2, 2, 28, 6); // Top highlight
-    platformGraphics.generateTexture('platform', 32, 32);
-    platformGraphics.destroy();
+    // Spike.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x9aa3ad); g.fillTriangle(0, 32, 8, 6, 16, 32); g.fillTriangle(16, 32, 24, 6, 32, 32);
+    g.fillStyle(0xced6dd); g.fillTriangle(2, 32, 8, 10, 10, 32); g.fillTriangle(18, 32, 24, 10, 26, 32);
+    g.fillStyle(0x5b636b); g.fillRect(0, 28, 32, 4);
+    g.generateTexture('spike', 32, 32); g.destroy();
 
-    // Cloud (soft white puff) - background decoration
-    const cloudGraphics = this.make.graphics({ x: 0, y: 0 });
-    cloudGraphics.fillStyle(0xffffff, 1);
-    cloudGraphics.fillCircle(26, 34, 20);
-    cloudGraphics.fillCircle(52, 28, 26);
-    cloudGraphics.fillCircle(82, 34, 22);
-    cloudGraphics.fillCircle(40, 44, 22);
-    cloudGraphics.fillCircle(70, 44, 22);
-    cloudGraphics.fillStyle(0xeaf4ff, 1);
-    cloudGraphics.fillRect(18, 46, 74, 10);
-    cloudGraphics.generateTexture('cloud', 108, 60);
-    cloudGraphics.destroy();
+    // Door.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x3a2414); g.fillRoundedRect(0, 0, 32, 64, 6);
+    g.fillStyle(0x7a4a23); g.fillRoundedRect(3, 3, 26, 60, 4);
+    g.fillStyle(0x5e3a1c); g.fillRoundedRect(6, 8, 20, 22, 3); g.fillRoundedRect(6, 34, 20, 22, 3);
+    g.fillStyle(0xffd23f); g.fillCircle(24, 36, 2.5);
+    g.generateTexture('door', 32, 64); g.destroy();
 
-    // Hill (rounded green mound) - background decoration
-    const hillGraphics = this.make.graphics({ x: 0, y: 0 });
-    hillGraphics.fillStyle(0x3aa64a, 1);
-    hillGraphics.fillEllipse(60, 70, 120, 90);
-    hillGraphics.fillStyle(0x2f8c3e, 1);
-    hillGraphics.fillEllipse(60, 78, 120, 70);
-    hillGraphics.generateTexture('hill', 120, 80);
-    hillGraphics.destroy();
+    // Flagpole.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0xbfc6cc); g.fillRect(13, 4, 5, 124);
+    g.fillStyle(0xe7ecef); g.fillRect(13, 4, 2, 124);
+    g.fillStyle(0xffd23f); g.fillCircle(15, 6, 7);
+    g.fillStyle(0xffe892); g.fillCircle(13, 4, 2.5);
+    g.fillStyle(0x161325); g.fillTriangle(18, 10, 18, 40, 50, 25);
+    g.fillStyle(0x39c46a); g.fillTriangle(18, 12, 18, 38, 46, 25);
+    g.fillStyle(0xffffff); g.fillCircle(28, 25, 4);
+    g.generateTexture('flagpole', 56, 132); g.destroy();
+  }
 
-    // Bush (small green tuft) - foreground decoration
-    const bushGraphics = this.make.graphics({ x: 0, y: 0 });
-    bushGraphics.fillStyle(0x2f8c3e, 1);
-    bushGraphics.fillCircle(16, 24, 14);
-    bushGraphics.fillCircle(34, 20, 16);
-    bushGraphics.fillCircle(52, 24, 14);
-    bushGraphics.fillRect(2, 24, 64, 12);
-    bushGraphics.generateTexture('bush', 68, 38);
-    bushGraphics.destroy();
+  private buildScenery(): void {
+    // Vertical sky gradient (stretched across the world in-scene).
+    let g = this.make.graphics({ x: 0, y: 0 });
+    g.fillGradientStyle(0x5aa9ff, 0x5aa9ff, 0xbfe6ff, 0xbfe6ff, 1);
+    g.fillRect(0, 0, 16, 720);
+    g.generateTexture('sky', 16, 720); g.destroy();
 
-    // Power-up mushroom (red cap with white spots)
-    const mushroomGraphics = this.make.graphics({ x: 0, y: 0 });
-    // Red cap
-    mushroomGraphics.fillStyle(0xFF0000);
-    mushroomGraphics.fillRoundedRect(2, 4, 28, 18, 8);
-    // White spots on cap
-    mushroomGraphics.fillStyle(0xFFFFFF);
-    mushroomGraphics.fillCircle(10, 10, 4);
-    mushroomGraphics.fillCircle(22, 10, 4);
-    mushroomGraphics.fillCircle(16, 16, 3);
-    // Stem (beige/tan)
-    mushroomGraphics.fillStyle(0xFFF8DC);
-    mushroomGraphics.fillRect(10, 18, 12, 12);
-    // Eyes on stem
-    mushroomGraphics.fillStyle(0x000000);
-    mushroomGraphics.fillCircle(13, 24, 2);
-    mushroomGraphics.fillCircle(19, 24, 2);
-    mushroomGraphics.generateTexture('mushroom', 32, 32);
-    mushroomGraphics.destroy();
+    // Sun with soft glow.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0xfff3b0, 0.25); g.fillCircle(60, 60, 58);
+    g.fillStyle(0xfff3b0, 0.4); g.fillCircle(60, 60, 44);
+    g.fillStyle(0xffe066, 1); g.fillCircle(60, 60, 32);
+    g.fillStyle(0xfff4c0, 1); g.fillCircle(52, 52, 12);
+    g.generateTexture('sun', 120, 120); g.destroy();
+
+    // Cloud.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(26, 34, 20); g.fillCircle(52, 26, 27); g.fillCircle(84, 34, 22);
+    g.fillCircle(40, 44, 22); g.fillCircle(70, 44, 22);
+    g.fillStyle(0xe6f2ff, 1); g.fillRect(18, 44, 76, 12);
+    g.generateTexture('cloud', 110, 60); g.destroy();
+
+    // Hill.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x3fa83f, 1); g.fillEllipse(60, 72, 120, 96);
+    g.fillStyle(0x349037, 1); g.fillEllipse(60, 82, 120, 70);
+    g.fillStyle(0x53c150, 1); g.fillEllipse(42, 56, 30, 22);
+    g.generateTexture('hill', 120, 84); g.destroy();
+
+    // Bush.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x2f9c3e, 1);
+    g.fillCircle(16, 26, 15); g.fillCircle(36, 20, 18); g.fillCircle(56, 26, 15);
+    g.fillRect(2, 26, 66, 14);
+    g.fillStyle(0x3fb851, 1); g.fillCircle(34, 17, 8);
+    g.generateTexture('bush', 70, 42); g.destroy();
+  }
+
+  private buildParticles(): void {
+    let g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0xffffff, 1); g.fillCircle(5, 5, 5);
+    g.generateTexture('dust', 10, 10); g.destroy();
+
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0xfff2a0, 1); g.fillRect(0, 0, 5, 5);
+    g.generateTexture('spark', 5, 5); g.destroy();
+
+    // Four-point star.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(8, 0, 6, 8, 10, 8); g.fillTriangle(8, 16, 6, 8, 10, 8);
+    g.fillTriangle(0, 8, 8, 6, 8, 10); g.fillTriangle(16, 8, 8, 6, 8, 10);
+    g.fillStyle(0xfff2a0, 1); g.fillCircle(8, 8, 3);
+    g.generateTexture('star', 16, 16); g.destroy();
+
+    // Bubble — soft glassy sphere.
+    g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x9fd8ff, 0.16); g.fillCircle(28, 28, 27);
+    g.lineStyle(3, 0xffffff, 0.7); g.strokeCircle(28, 28, 26);
+    g.lineStyle(2, 0xbfe9ff, 0.5); g.strokeCircle(28, 28, 22);
+    g.fillStyle(0xffffff, 0.85); g.fillCircle(19, 17, 5);
+    g.fillStyle(0xffffff, 0.5); g.fillCircle(36, 22, 3);
+    g.generateTexture('bubble', 56, 56); g.destroy();
+  }
+
+  private buildAnims(): void {
+    const def = (key: string, frames: string[], frameRate: number, repeat: number) => {
+      if (this.anims.exists(key)) return;
+      this.anims.create({
+        key,
+        frames: frames.map(f => ({ key: f })),
+        frameRate,
+        repeat,
+      });
+    };
+
+    for (const p of ['player1', 'player2']) {
+      const n = p === 'player1' ? 'p1' : 'p2';
+      def(`${n}-idle`, [p], 1, -1);
+      def(`${n}-walk`, [`${p}_walk1`, p, `${p}_walk2`, p], 12, -1);
+      def(`${n}-jump`, [`${p}_jump`], 1, -1);
+      def(`${n}-hurt`, [`${p}_hurt`], 1, -1);
+    }
+
+    def('goomba-walk', ['goomba_walk1', 'goomba_walk2'], 6, -1);
+    def('coin-spin', ['coin', 'coin1', 'coin2', 'coin3'], 10, -1);
   }
 }

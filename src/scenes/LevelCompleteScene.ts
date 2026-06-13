@@ -53,21 +53,22 @@ export class LevelCompleteScene extends Phaser.Scene {
     });
 
     // Stats
-    const coinsText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20, `Coins: ${this.coins}`, {
-      fontSize: '32px',
+    const scoreText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 26, `Score: ${this.settings.score}`, {
+      fontSize: '34px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 5,
+    });
+    scoreText.setOrigin(0.5);
+
+    const coinsText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 22, `Coins: ${this.coins}     Lives: ${this.lives}`, {
+      fontSize: '26px',
       color: '#FFD700',
       stroke: '#000000',
       strokeThickness: 4,
     });
     coinsText.setOrigin(0.5);
-
-    const livesText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 30, `Lives remaining: ${this.lives}`, {
-      fontSize: '32px',
-      color: '#FF4444',
-      stroke: '#000000',
-      strokeThickness: 4,
-    });
-    livesText.setOrigin(0.5);
 
     // Continue prompt
     const continueText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 100, `Press JUMP for Level ${this.settings.levelNumber}`, {

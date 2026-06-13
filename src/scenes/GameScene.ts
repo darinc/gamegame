@@ -17,13 +17,14 @@ import { BotController } from '../systems/BotController';
 import type { Threat } from '../systems/BotController';
 import { buildSettings, parseSettingsFromURL } from '../settings';
 import type { GameSettings, PlayerState } from '../settings';
+import { audio } from '../systems/AudioSynth';
 
 // Tethered camera settings
 const MAX_PLAYER_DISTANCE = 900;
 const CAMERA_LERP = 0.1;
 const MIN_ZOOM = 0.6;
-const MAX_ZOOM = 1.0;
-const ZOOM_DISTANCE_THRESHOLD = 500;
+const MAX_ZOOM = 1.35; // tighter framing so the heroes feel present, not tiny
+const ZOOM_DISTANCE_THRESHOLD = 420;
 
 // Stomp bounce velocity
 const STOMP_BOUNCE = -300;
@@ -46,21 +47,19 @@ export class GameScene extends Phaser.Scene {
   // Game state
   private coinCount: number = 0;
   private lives: number = 3;
-  private levelText!: Phaser.GameObjects.Text;
+  private score: number = 0;
+  private combo: number = 0;
+  private lastStompTime: number = -9999;
 
-  // UI
+  // UI (the persistent HUD lives in HudScene; this is just the dev overlay)
   private debugText!: Phaser.GameObjects.Text;
   private debugVisible: boolean = false;
-  private coinText!: Phaser.GameObjects.Text;
-  private livesText!: Phaser.GameObjects.Text;
-  private healthBars: Phaser.GameObjects.Graphics[] = [];
 
   // Level exit
   private exitSprite: Phaser.GameObjects.Sprite | null = null;
   private exitTrigger: Phaser.GameObjects.GameObject | null = null;
   private playersFinished: Set<Player> = new Set();
   private levelCompleteCountdown: number = -1;
-  private countdownText: Phaser.GameObjects.Text | null = null;
 
   // Camera state
   private cameraTarget: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
@@ -81,7 +80,6 @@ export class GameScene extends Phaser.Scene {
     // Reset level completion state
     this.playersFinished = new Set();
     this.levelCompleteCountdown = -1;
-    this.countdownText = null;
 
     // Reset all game object arrays (important when scene restarts)
     this.players = [];
@@ -91,7 +89,6 @@ export class GameScene extends Phaser.Scene {
     this.bricks = [];
     this.questionBlocks = [];
     this.powerUps = [];
-    this.healthBars = [];
     this.botControllers = [];
     this.exitSprite = null;
     this.exitTrigger = null;
@@ -102,6 +99,9 @@ export class GameScene extends Phaser.Scene {
     // Use persisted game state if coming from level complete, otherwise reset
     this.coinCount = this.settings.coins;
     this.lives = this.settings.lives;
+    this.score = this.settings.score;
+    this.combo = 0;
+    this.lastStompTime = -9999;
     this.initialPlayerStates = this.settings.playerStates;
 
     console.log(
@@ -168,7 +168,77 @@ export class GameScene extends Phaser.Scene {
     // Create debug UI
     this.createUI();
 
+    // Music (the level-intro banner is drawn by HudScene).
+    audio.startMusic();
+
     console.log('GameScene created');
+  }
+
+  // ---- juice helpers -------------------------------------------------------
+
+  private addScore(points: number, x?: number, y?: number, label?: string): void {
+    this.score += points;
+    this.registry.set('hud.score', this.score);
+    if (x !== undefined && y !== undefined) {
+      this.popText(x, y, label ?? `+${points}`, '#ffe892');
+    }
+  }
+
+  // Floating text that rises and fades (score popups, combos).
+  private popText(x: number, y: number, text: string, color: string): void {
+    const t = this.add.text(x, y, text, {
+      fontSize: '22px',
+      color,
+      fontStyle: 'bold',
+      stroke: '#161325',
+      strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(150);
+    this.tweens.add({
+      targets: t,
+      y: y - 46,
+      alpha: 0,
+      duration: 750,
+      ease: 'Quad.easeOut',
+      onComplete: () => t.destroy(),
+    });
+  }
+
+  // Burst of stars/dust where an enemy was squashed.
+  private poof(x: number, y: number): void {
+    if (!this.textures.exists('star')) return;
+    const p = this.add.particles(x, y, 'star', {
+      speed: { min: 60, max: 180 },
+      angle: { min: 200, max: 340 },
+      scale: { start: 0.9, end: 0 },
+      lifespan: 420,
+      gravityY: 500,
+      quantity: 7,
+      rotate: { min: 0, max: 360 },
+      tint: [0xffffff, 0xffe892],
+    });
+    p.setDepth(20);
+    p.explode(7);
+    this.time.delayedCall(500, () => p.destroy());
+  }
+
+  // Stomp scoring with a short time-window combo for chained bounces.
+  private registerStomp(x: number, y: number): void {
+    audio.stomp();
+    this.poof(x, y);
+    this.cameras.main.shake(90, 0.006);
+
+    const now = this.time.now;
+    this.combo = (now - this.lastStompTime < 900) ? this.combo + 1 : 1;
+    this.lastStompTime = now;
+
+    const points = 100 * this.combo;
+    this.addScore(points, x, y - 20, this.combo > 1 ? `${this.combo}x  +${points}` : `+${points}`);
+    if (this.combo === 5) {
+      this.lives++;
+      this.updateLivesUI();
+      audio.oneUp();
+      this.popText(x, y - 50, '1UP!', '#7CFC6A');
+    }
   }
 
   private createPlayers(): void {
@@ -304,7 +374,7 @@ export class GameScene extends Phaser.Scene {
       // Bounce the player
       playerBody.setVelocityY(STOMP_BOUNCE);
 
-      console.log('Enemy stomped!');
+      this.registerStomp(enemy.x, enemy.y);
     } else {
       // Player got hit - take damage
       const knockbackDir = player.x < enemy.x ? -1 : 1;
@@ -334,7 +404,8 @@ export class GameScene extends Phaser.Scene {
       // Bounce the player
       playerBody.setVelocityY(STOMP_BOUNCE);
 
-      console.log('Bull stomped!');
+      this.registerStomp(bull.x, bull.y);
+      this.addScore(150);
     } else {
       // Player got hit - take damage (extra knockback if bull is charging)
       const knockbackDir = player.x < bull.x ? -1 : 1;
@@ -369,6 +440,7 @@ export class GameScene extends Phaser.Scene {
             if (!player.getIsInBubble() && coin.collect()) {
               this.coinCount++;
               this.updateCoinUI();
+              this.addScore(200, coin.x, coin.y - 10, '+200');
             }
           }
         );
@@ -625,6 +697,7 @@ export class GameScene extends Phaser.Scene {
             if (powerUp.collect()) {
               player.powerUp();
               this.updateHealthUI();
+              this.addScore(1000, powerUp.x, powerUp.y - 16, '+1000');
               this.powerUps = this.powerUps.filter(p => p !== powerUp);
             }
           }
@@ -637,6 +710,8 @@ export class GameScene extends Phaser.Scene {
     if (this.coins.includes(coin)) {
       this.coinCount++;
       this.coins = this.coins.filter(c => c !== coin);
+      audio.coin();
+      this.addScore(200, coin.x, coin.y - 10, '+200');
       coin.destroy();
     }
   }
@@ -707,28 +782,7 @@ export class GameScene extends Phaser.Scene {
     // Start countdown for remaining players (3 seconds)
     if (this.levelCompleteCountdown < 0) {
       this.levelCompleteCountdown = 3;
-      this.createCountdownUI();
-    }
-  }
-
-  private createCountdownUI(): void {
-    this.countdownText = this.add.text(GAME_WIDTH / 2, 80, '', {
-      fontSize: '48px',
-      color: '#FFD700',
-      fontStyle: 'bold',
-      stroke: '#000000',
-      strokeThickness: 6,
-    });
-    this.countdownText.setOrigin(0.5);
-    this.countdownText.setScrollFactor(0);
-    this.countdownText.setDepth(100);
-    this.updateCountdownUI();
-  }
-
-  private updateCountdownUI(): void {
-    if (this.countdownText && this.levelCompleteCountdown >= 0) {
-      const seconds = Math.ceil(this.levelCompleteCountdown);
-      this.countdownText.setText(`Hurry! ${seconds}`);
+      this.registry.set('hud.countdown', this.levelCompleteCountdown);
     }
   }
 
@@ -736,7 +790,7 @@ export class GameScene extends Phaser.Scene {
     if (this.levelCompleteCountdown < 0) return;
 
     this.levelCompleteCountdown -= delta / 1000;
-    this.updateCountdownUI();
+    this.registry.set('hud.countdown', this.levelCompleteCountdown);
 
     if (this.levelCompleteCountdown <= 0) {
       this.completeLevel();
@@ -746,6 +800,8 @@ export class GameScene extends Phaser.Scene {
   private completeLevel(): void {
     // Prevent multiple triggers
     this.levelCompleteCountdown = -1;
+    this.registry.set('hud.countdown', -1);
+    audio.fanfare();
     if (this.exitTrigger && this.exitTrigger !== this.exitSprite) {
       this.exitTrigger.destroy();
     }
@@ -766,6 +822,16 @@ export class GameScene extends Phaser.Scene {
   private createBackground(): void {
     const { width, height } = this.levelLoader.getWorldSize();
     const groundTop = height - 64; // top of the 2-tile ground band
+
+    // Sky gradient pinned to the camera (covers the whole view).
+    if (this.textures.exists('sky')) {
+      this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'sky')
+        .setScrollFactor(0).setDepth(-20).setDisplaySize(GAME_WIDTH + 4, GAME_HEIGHT + 4);
+    }
+    // Sun (slow parallax).
+    if (this.textures.exists('sun')) {
+      this.add.image(180, 140, 'sun').setScrollFactor(0.08).setDepth(-19).setScale(1.1).setAlpha(0.95);
+    }
 
     // Clouds (far parallax)
     for (let x = 120; x < width; x += 340) {
@@ -848,43 +914,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createUI(): void {
-    // Coin counter (top right)
-    this.coinText = this.add.text(GAME_WIDTH - 20, 20, `Coins: ${this.coinCount}`, {
-      fontSize: '24px',
-      color: '#FFD700',
-      fontStyle: 'bold',
-      stroke: '#000000',
-      strokeThickness: 4,
-    });
-    this.coinText.setOrigin(1, 0);
-    this.coinText.setScrollFactor(0);
-    this.coinText.setDepth(100);
+    // The persistent HUD runs as a parallel scene with its own un-zoomed camera,
+    // so the gameplay camera's zoom/pan can't distort it. We publish state into
+    // the shared registry and HudScene renders it.
+    this.publishHud();
+    this.scene.launch('HudScene');
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scene.stop('HudScene'));
 
-    // Lives counter (top left)
-    this.livesText = this.add.text(20, 20, `Lives: ${this.lives}`, {
-      fontSize: '24px',
-      color: '#FF4444',
-      fontStyle: 'bold',
-      stroke: '#000000',
-      strokeThickness: 4,
-    });
-    this.livesText.setScrollFactor(0);
-    this.livesText.setDepth(100);
-
-    // Level counter (top center)
-    this.levelText = this.add.text(GAME_WIDTH / 2, 46, `Level ${this.settings.levelNumber}`, {
-      fontSize: '22px',
-      color: '#ffffff',
-      fontStyle: 'bold',
-      stroke: '#000000',
-      strokeThickness: 4,
-    });
-    this.levelText.setOrigin(0.5, 0);
-    this.levelText.setScrollFactor(0);
-    this.levelText.setDepth(100);
-
-    // Debug text (below lives)
-    this.debugText = this.add.text(10, 60, '', {
+    // Debug overlay (dev only, off by default).
+    this.debugText = this.add.text(10, 120, '', {
       fontSize: '14px',
       color: '#ffffff',
       backgroundColor: '#000000aa',
@@ -901,52 +939,39 @@ export class GameScene extends Phaser.Scene {
         this.debugText.setVisible(this.debugVisible);
       });
 
-    // Health bars for each player
-    this.players.forEach(() => {
-      const healthBar = this.add.graphics();
-      healthBar.setScrollFactor(0);
-      healthBar.setDepth(100);
-      this.healthBars.push(healthBar);
-    });
-    this.updateHealthUI();
+    // Mute toggle (M)
+    this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.M)
+      .on('down', () => {
+        const muted = audio.toggleMute();
+        this.popText(this.cameras.main.midPoint.x, this.cameras.main.midPoint.y - 120,
+          muted ? '🔇 Muted' : '🔊 Sound on', '#ffffff');
+      });
+  }
+
+  // Publish the full HUD state into the shared registry for HudScene to render.
+  private publishHud(): void {
+    const r = this.registry;
+    r.set('hud.lives', this.lives);
+    r.set('hud.coins', this.coinCount);
+    r.set('hud.score', this.score);
+    r.set('hud.level', this.settings.levelNumber);
+    r.set('hud.players', this.playerCount);
+    r.set('hud.health', this.players.map(p => p.getHealth()));
+    // Match each bar to its hero's cap (P1 red, P2 green) for instant ownership.
+    r.set('hud.colors', this.players.map((_p, i) => (i === 0 ? 0xe83b32 : 0x39c46a)));
+    r.set('hud.countdown', this.levelCompleteCountdown);
   }
 
   private updateCoinUI(): void {
-    this.coinText.setText(`Coins: ${this.coinCount}`);
+    this.registry.set('hud.coins', this.coinCount);
   }
 
   private updateLivesUI(): void {
-    this.livesText.setText(`Lives: ${this.lives}`);
+    this.registry.set('hud.lives', this.lives);
   }
 
   private updateHealthUI(): void {
-    const barWidth = 100;
-    const barHeight = 12;
-    const startX = GAME_WIDTH / 2 - (this.playerCount * (barWidth + 20)) / 2 + 10;
-    const startY = 20;
-
-    this.players.forEach((player, index) => {
-      const healthBar = this.healthBars[index];
-      if (!healthBar) return;
-
-      const x = startX + index * (barWidth + 20);
-      const health = player.getHealth();
-
-      healthBar.clear();
-
-      // Background
-      healthBar.fillStyle(0x333333);
-      healthBar.fillRect(x, startY, barWidth, barHeight);
-
-      // Health fill
-      const healthColor = index === 0 ? 0xFF8C00 : 0x44ff88;
-      healthBar.fillStyle(healthColor);
-      healthBar.fillRect(x, startY, barWidth * Math.max(0, health), barHeight);
-
-      // Border
-      healthBar.lineStyle(2, 0xffffff);
-      healthBar.strokeRect(x, startY, barWidth, barHeight);
-    });
+    this.registry.set('hud.health', this.players.map(p => p.getHealth()));
   }
 
   // Snapshot the running state to carry into the next scene (level / game over).
@@ -960,6 +985,7 @@ export class GameScene extends Phaser.Scene {
       botMask: this.settings.botMask.slice(),
       lives: this.lives,
       coins: this.coinCount,
+      score: this.score,
       playerStates,
       levelNumber: this.settings.levelNumber + (advanceLevel ? 1 : 0),
     };
@@ -977,6 +1003,7 @@ export class GameScene extends Phaser.Scene {
   private loseLife(player: Player, index: number): void {
     this.lives--;
     this.updateLivesUI();
+    audio.die();
 
     if (this.lives <= 0) {
       this.scene.start('GameOverScene', {

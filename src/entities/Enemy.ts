@@ -33,6 +33,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     body.setVelocityX(GOOMBA_SPEED * this.walkDirection);
 
     this.setDepth(5);
+
+    if (scene.anims.exists('goomba-walk')) this.play('goomba-walk');
   }
 
   setGroundGroup(group: Phaser.Physics.Arcade.StaticGroup): void {
@@ -126,7 +128,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     body.setAllowGravity(false);
     body.setImmovable(true);
 
-    // Squash effect
+    // Squash effect (freeze the walk cycle first)
+    this.anims.stop();
     this.setScale(1.2, 0.4);
     this.setAlpha(0.7);
   }

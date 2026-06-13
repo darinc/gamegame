@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Player } from './Player';
 import { Brick } from './Brick';
+import { audio } from '../systems/AudioSynth';
 
 // Movement constants
 const PATROL_SPEED = 30;
@@ -173,6 +174,7 @@ export class ChargingBull extends Phaser.Physics.Arcade.Sprite {
   private enterAlertState(time: number, targetPlayer: Player): void {
     this.bullState = BullState.ALERT;
     this.stateStartTime = time;
+    audio.charge();
 
     // Face the player
     const newDirection = targetPlayer.x < this.x ? -1 : 1;

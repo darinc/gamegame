@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { PlayerInput } from '../systems/InputManager';
+import { audio } from '../systems/AudioSynth';
 
 // Physics constants for Mario-like feel
 const WALK_SPEED = 200;
@@ -58,6 +59,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Power-up state
   private isPoweredUp: boolean = false;
 
+  // Animation / juice state
+  private animState: string = '';
+  private hurtUntil: number = 0;
+  private wasOnGround: boolean = true;
+  private fallSpeed: number = 0;
+
   constructor(
     scene: Phaser.Scene,
     x: number,
@@ -86,6 +93,37 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Set depth based on player index
     this.setDepth(10 + playerIndex);
+
+    // Start idle animation
+    this.setAnimState('idle');
+  }
+
+  private animPrefix(): string {
+    return this.playerIndex === 0 ? 'p1' : 'p2';
+  }
+
+  private setAnimState(state: 'idle' | 'walk' | 'jump' | 'hurt'): void {
+    if (this.animState === state) return;
+    this.animState = state;
+    this.anims.play(`${this.animPrefix()}-${state}`, true);
+  }
+
+  // Puff of dust at the feet (jumps, landings).
+  private spawnDust(x: number, y: number, count: number, big = false): void {
+    if (!this.scene.textures.exists('dust')) return;
+    const p = this.scene.add.particles(x, y, 'dust', {
+      speed: { min: big ? 60 : 30, max: big ? 200 : 110 },
+      angle: { min: 200, max: 340 },
+      scale: { start: big ? 0.9 : 0.6, end: 0 },
+      alpha: { start: 0.7, end: 0 },
+      lifespan: big ? 500 : 320,
+      gravityY: 300,
+      quantity: count,
+      tint: 0xe8d8b8,
+    });
+    p.setDepth(this.depth - 1);
+    p.explode(count);
+    this.scene.time.delayedCall(600, () => p.destroy());
   }
 
   update(input: PlayerInput, time: number, delta: number): void {
@@ -102,6 +140,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Base scale depends on power-up state
     const baseScaleY = this.isPoweredUp ? 1 : 0.5;
+
+    // Landing detection (air -> ground transition this frame)
+    const justLanded = onGround && !this.wasOnGround;
+    const wasPounding = this.isGroundPounding;
+    if (!onGround) this.fallSpeed = body.velocity.y;
 
     // Track grounded state for coyote time
     if (onGround) {
@@ -120,8 +163,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           duration: 150,
           ease: 'Back.easeOut',
         });
+        // Juicy slam: thud, dust, and a kick of screen shake.
+        audio.thud();
+        this.spawnDust(this.x, body.bottom, 14, true);
+        this.scene.cameras.main.shake(180, 0.012);
       }
     }
+    this.wasOnGround = onGround;
 
     // Ground pound logic
     if (!onGround && input.downJustPressed && !this.isGroundPounding) {
@@ -143,6 +191,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           this.groundPoundStarted = true;
           body.setAllowGravity(true);
           body.setVelocityY(GROUND_POUND_VELOCITY);
+          audio.pop(); // dive cue
         }
       } else {
         // Pounding down - maintain fast speed, keep horizontal momentum
@@ -151,6 +200,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         }
         this.setScale(0.9, 1.1 * baseScaleY); // Slight vertical stretch
       }
+      this.setAnimState('jump');
       return; // Skip normal movement during ground pound
     }
 
@@ -169,6 +219,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.isJumping = true;
       this.jumpHoldTime = 0;
       this.jumpBufferTime = 0; // Clear buffer
+      audio.jump(this.isPoweredUp);
+      this.spawnDust(this.x, body.bottom, 4);
     }
 
     // Variable jump height - hold jump for higher
@@ -226,20 +278,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const stretchY = 1 + velocityStretch * 0.15;
     const squashX = 1 - velocityStretch * 0.1;
 
-    // Landing squash
-    if (onGround && Math.abs(body.velocity.y) < 50) {
-      this.setScale(1.1, 0.9 * baseScaleY);
+    if (!onGround) {
+      // In air - stretch based on vertical velocity
+      this.setScale(Math.max(0.85, squashX), Math.min(1.2, stretchY) * baseScaleY);
+    } else if (justLanded && !wasPounding) {
+      // One-shot landing squash (fires only on the air->ground transition, so we
+      // don't spawn a tween every frame while standing still).
+      this.setScale(1.15, 0.82 * baseScaleY);
       this.scene.tweens.add({
         targets: this,
         scaleX: 1,
         scaleY: baseScaleY,
-        duration: 100,
+        duration: 120,
         ease: 'Back.easeOut',
       });
-    } else if (!onGround) {
-      // In air - stretch based on vertical velocity
-      this.setScale(Math.max(0.85, squashX), Math.min(1.2, stretchY) * baseScaleY);
+      if (this.fallSpeed > 520) this.spawnDust(this.x, body.bottom, 6);
     }
+
+    // Drive the animation state machine
+    if (time < this.hurtUntil) this.setAnimState('hurt');
+    else if (!onGround) this.setAnimState('jump');
+    else if (Math.abs(body.velocity.x) > 25) this.setAnimState('walk');
+    else this.setAnimState('idle');
   }
 
   enterBubble(): void {
@@ -247,6 +307,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.isInBubble = true;
     this.bubbleTime = 0;
+    this.setAnimState('idle');
+    audio.bubble();
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(0, 0);
     body.setAllowGravity(false);
@@ -276,6 +338,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.isInBubble) return;
 
     this.isInBubble = false;
+    audio.pop();
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(true);
 
@@ -353,11 +416,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.health -= damage;
     this.isInvincible = true;
+    this.hurtUntil = _time + 600;
+    this.animState = ''; // force hurt frame on next update
 
     // If powered up and health drops to half or below, shrink to small
     // (but keep the reduced health - don't reset it)
     if (this.isPoweredUp && this.health <= 0.5) {
       this.shrink();
+      audio.powerDown();
+    } else {
+      audio.hurt();
     }
 
     // Flash effect
@@ -422,6 +490,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.isPoweredUp = true;
     this.health = 1.0; // Full 4 health bars
+    audio.powerUp();
 
     // Grow to full size
     const body = this.body as Phaser.Physics.Arcade.Body;

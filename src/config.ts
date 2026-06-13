@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { GameScene } from './scenes/GameScene';
+import { HudScene } from './scenes/HudScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { LevelCompleteScene } from './scenes/LevelCompleteScene';
 
@@ -24,7 +25,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   input: {
     gamepad: true,
   },
-  scene: [BootScene, TitleScene, GameScene, GameOverScene, LevelCompleteScene],
+  scene: [BootScene, TitleScene, GameScene, HudScene, GameOverScene, LevelCompleteScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

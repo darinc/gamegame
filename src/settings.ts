@@ -22,6 +22,7 @@ export interface GameSettings {
   // State carried between levels
   lives: number;
   coins: number;
+  score: number;
   playerStates: PlayerState[];
 }
 
@@ -35,6 +36,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   levelNumber: 1,
   lives: 5,
   coins: 0,
+  score: 0,
   playerStates: [],
 };
 

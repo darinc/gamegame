@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { audio } from '../systems/AudioSynth';
 
 export class Brick extends Phaser.Physics.Arcade.Sprite {
   private broken: boolean = false;
@@ -16,15 +17,17 @@ export class Brick extends Phaser.Physics.Arcade.Sprite {
   break(): void {
     if (this.broken) return;
     this.broken = true;
+    audio.brick();
 
     // Create break particles
     const particles = this.scene.add.particles(this.x, this.y, 'brick', {
-      speed: { min: 100, max: 200 },
-      angle: { min: 220, max: 320 },
-      scale: { start: 0.4, end: 0 },
-      lifespan: 500,
-      gravityY: 800,
-      quantity: 6,
+      speed: { min: 100, max: 240 },
+      angle: { min: 200, max: 340 },
+      scale: { start: 0.45, end: 0 },
+      lifespan: 600,
+      gravityY: 900,
+      rotate: { min: 0, max: 360 },
+      quantity: 8,
     });
 
     // Stop emitting after burst

@@ -6,6 +6,7 @@ import {
   shouldAutostart,
   MODE_PRESETS,
 } from '../settings';
+import { audio } from '../systems/AudioSynth';
 
 interface MenuOption {
   label: string;
@@ -42,6 +43,7 @@ export class TitleScene extends Phaser.Scene {
     this.optionTexts = [];
 
     this.drawBackdrop();
+    audio.startMusic();
 
     // Title
     const title = this.add.text(GAME_WIDTH / 2, 130, 'SUPER CO-OP BROS', {
@@ -86,15 +88,15 @@ export class TitleScene extends Phaser.Scene {
       color: '#FFE08A',
     }).setOrigin(0.5);
 
-    // Controls footer
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 70,
+    // Controls footer (kept above the ground so the heroes own the grass)
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 150,
       'P1: W A S D  (W jump, Shift run, Q bubble)        P2: Arrow Keys  (Up jump, Space run, / bubble)',
-      { fontSize: '18px', color: '#cfe8ff' },
+      { fontSize: '18px', color: '#eaf4ff', stroke: '#163b6b', strokeThickness: 3 },
     ).setOrigin(0.5);
 
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 38,
-      '↑↓ choose      Enter / Jump to start      Gamepads supported',
-      { fontSize: '18px', color: '#9fcaff' },
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 120,
+      '↑↓ choose      Enter / Jump to start      M mutes      Gamepads supported',
+      { fontSize: '18px', color: '#cfe8ff', stroke: '#163b6b', strokeThickness: 3 },
     ).setOrigin(0.5);
 
     this.bindKeys();
@@ -102,31 +104,42 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private drawBackdrop(): void {
-    // Sky
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x5c94fc);
+    // Sky gradient
+    if (this.textures.exists('sky')) {
+      this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'sky').setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+    } else {
+      this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x5c94fc);
+    }
+    if (this.textures.exists('sun')) {
+      this.add.image(140, 130, 'sun').setScale(1.1).setAlpha(0.95);
+    }
 
     // A few clouds + hills for charm (textures generated in BootScene).
     if (this.textures.exists('cloud')) {
-      [[180, 110, 1.2], [1040, 90, 1.0], [620, 70, 0.8], [900, 200, 0.7]].forEach(
-        ([x, y, s]) => this.add.image(x, y, 'cloud').setScale(s).setAlpha(0.95),
-      );
+      const clouds = [[180, 110, 1.2], [1040, 90, 1.0], [620, 70, 0.8], [900, 200, 0.7]];
+      clouds.forEach(([x, y, s]) => {
+        const c = this.add.image(x, y, 'cloud').setScale(s).setAlpha(0.95);
+        this.tweens.add({ targets: c, x: x + 30, duration: 4000 + s * 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      });
     }
     if (this.textures.exists('hill')) {
-      this.add.image(260, GAME_HEIGHT - 40, 'hill').setScale(2.2).setAlpha(0.9);
-      this.add.image(1000, GAME_HEIGHT - 40, 'hill').setScale(3).setAlpha(0.9);
+      this.add.image(260, GAME_HEIGHT - 40, 'hill').setScale(2.2).setAlpha(0.95);
+      this.add.image(1000, GAME_HEIGHT - 40, 'hill').setScale(3).setAlpha(0.95);
     }
     // Ground strip
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 16, GAME_WIDTH, 32, 0x8b4513);
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 30, GAME_WIDTH, 6, 0x228b22);
+    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 16, GAME_WIDTH, 32, 0x7a4a23);
+    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 30, GAME_WIDTH, 6, 0x57c54a);
 
-    // The two heroes waving hello.
+    // The two heroes marching hello (animated sprites).
     if (this.textures.exists('player1')) {
-      const p1 = this.add.image(GAME_WIDTH / 2 - 70, GAME_HEIGHT - 58, 'player1');
-      const p2 = this.add.image(GAME_WIDTH / 2 + 70, GAME_HEIGHT - 58, 'player2');
+      const p1 = this.add.sprite(GAME_WIDTH / 2 - 90, GAME_HEIGHT - 46, 'player1').setScale(2);
+      const p2 = this.add.sprite(GAME_WIDTH / 2 + 90, GAME_HEIGHT - 46, 'player2').setScale(2);
+      if (this.anims.exists('p1-walk')) p1.play('p1-walk');
+      if (this.anims.exists('p2-walk')) p2.play('p2-walk');
       [p1, p2].forEach((p, i) => {
         this.tweens.add({
           targets: p,
-          y: p.y - 14,
+          y: p.y - 16,
           duration: 520,
           yoyo: true,
           repeat: -1,
@@ -150,6 +163,7 @@ export class TitleScene extends Phaser.Scene {
 
   private move(dir: number): void {
     this.selected = (this.selected + dir + OPTIONS.length) % OPTIONS.length;
+    audio.select();
     this.refresh();
   }
 
@@ -165,6 +179,7 @@ export class TitleScene extends Phaser.Scene {
 
   private confirm(): void {
     const preset = OPTIONS[this.selected].preset;
+    audio.start();
     this.cameras.main.flash(180, 255, 255, 255);
     this.time.delayedCall(120, () => {
       this.scene.start('GameScene', buildSettings(MODE_PRESETS[preset]));
