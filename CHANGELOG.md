@@ -11,8 +11,9 @@ Playtest fixes and variety, from real 2-player feedback.
 
 ### Added
 
-- **Duck & slide**: hold Down on the ground to crouch (shrinks the hitbox to fit
-  under low gaps); duck while moving fast and you coast into a slide with dust.
+- **Duck & slide**: hold Down on the ground to crouch — a dedicated crouch pose
+  that hunkers to the ground with feet planted (shrinks the hitbox to fit under
+  low gaps); duck while moving fast and you coast into a slide with dust.
 - **Per-level visual themes** that cycle each level — Grassland, Sunset, Dusk,
   Night, Snow, Cavern — recoloring the sky gradient, sun, scenery, and terrain so
   an endless run actually feels like it's going somewhere.

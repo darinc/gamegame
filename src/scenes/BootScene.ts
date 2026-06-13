@@ -92,6 +92,36 @@ const LEGS_JUMP = [
 const hero = (legs: string[]) => [...HERO_HEAD, ...legs];
 const heroHurt = (legs: string[]) => [...HERO_HEAD_HURT, ...legs];
 
+// A crouch pose — full 24-tall frame with the feet on the SAME bottom rows as the
+// standing frames, so ducking reads as hunkering down to the ground (not a sprite
+// squashed toward its center, which would lift the feet off the floor).
+const HERO_DUCK = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '....KKKKKKKK....',
+  '...KCCCCCCCCK...',
+  '..KKKKKKKKKKKK..',
+  '..FFEEFFFFEEFF..',
+  '..FFEPFFFFEPFF..',
+  '..FFFFmmmmFFFF..',
+  '.GKOOOOOOOOOOKG.',
+  '.GKOoOOOOOOoOKG.',
+  '..KOOOOOOOOOOK..',
+  '..KBBBBBBBBBBK..',
+  '.KBBBBBBBBBBBBK.',
+  '.KBBBBBBBBBBBBK.',
+  '.KBBBK....KBBBK.',
+  '.KBBK......KBBK.',
+  '.KBBK......KBBK.',
+  '.KBBK......KBBK.',
+  '.KKK........KKK.',
+];
+
 // Cute angry critter (goomba replacement) — two walk frames + a squashed frame.
 const CRIT: Palette = {
   '.': null, K: 0x161325, M: 0xb0673a, m: 0x894d28, E: 0xffffff, P: 0x2a2740, t: 0xfff4e2,
@@ -208,6 +238,7 @@ export class BootScene extends Phaser.Scene {
       this.drawPixels(`${prefix}_walk2`, hero(LEGS_WALK_B), pal);
       this.drawPixels(`${prefix}_jump`, hero(LEGS_JUMP), pal);
       this.drawPixels(`${prefix}_hurt`, heroHurt(LEGS_IDLE), pal);
+      this.drawPixels(`${prefix}_duck`, HERO_DUCK, pal);
     };
     make('player1', P1_COLORS);
     make('player2', P2_COLORS);
@@ -450,6 +481,7 @@ export class BootScene extends Phaser.Scene {
       def(`${n}-walk`, [`${p}_walk1`, p, `${p}_walk2`, p], 12, -1);
       def(`${n}-jump`, [`${p}_jump`], 1, -1);
       def(`${n}-hurt`, [`${p}_hurt`], 1, -1);
+      def(`${n}-duck`, [`${p}_duck`], 1, -1);
     }
 
     def('goomba-walk', ['goomba_walk1', 'goomba_walk2'], 6, -1);

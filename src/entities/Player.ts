@@ -109,7 +109,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.playerIndex === 0 ? 'p1' : 'p2';
   }
 
-  private setAnimState(state: 'idle' | 'walk' | 'jump' | 'hurt'): void {
+  private setAnimState(state: 'idle' | 'walk' | 'jump' | 'hurt' | 'duck'): void {
     if (this.animState === state) return;
     this.animState = state;
     this.anims.play(`${this.animPrefix()}-${state}`, true);
@@ -305,8 +305,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const squashX = 1 - velocityStretch * 0.1;
 
     if (ducking) {
-      // Crouch pose: squat down, fixed.
-      this.setScale(1.18, 0.55 * baseScaleY);
+      // Crouch pose. Keep scaleY at the base height so the feet stay planted on
+      // the ground — the crouch is in the artwork, not a center-squash. A touch
+      // wider sells the squat.
+      this.setScale(1.08, baseScaleY);
     } else if (!onGround) {
       // In air - stretch based on vertical velocity
       this.setScale(Math.max(0.85, squashX), Math.min(1.2, stretchY) * baseScaleY);
@@ -327,7 +329,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Drive the animation state machine
     if (time < this.hurtUntil) this.setAnimState('hurt');
     else if (!onGround) this.setAnimState('jump');
-    else if (ducking) this.setAnimState('idle');
+    else if (ducking) this.setAnimState('duck');
     else if (Math.abs(body.velocity.x) > 25) this.setAnimState('walk');
     else this.setAnimState('idle');
   }
