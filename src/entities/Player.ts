@@ -10,6 +10,11 @@ const DECELERATION = 1500;
 const AIR_ACCELERATION = 600;
 const AIR_DECELERATION = 400;
 
+// Duck / slide
+const SLIDE_SPEED_THRESHOLD = 150; // above this, ducking coasts into a slide
+const SLIDE_DECEL = 340;           // gentle friction while sliding
+const DUCK_STOP_DECEL = 1700;      // quick stop when ducking from a slow walk
+
 const JUMP_VELOCITY = -420; // Balanced for ~4 tile jump height
 const JUMP_HOLD_FORCE = -25; // Hold for extra height
 const MAX_JUMP_HOLD_TIME = 250; // ms
@@ -64,6 +69,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private hurtUntil: number = 0;
   private wasOnGround: boolean = true;
   private fallSpeed: number = 0;
+  private airSpeedCap: number = WALK_SPEED; // horizontal speed locked at takeoff
+  private isDucking: boolean = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -145,6 +152,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const justLanded = onGround && !this.wasOnGround;
     const wasPounding = this.isGroundPounding;
     if (!onGround) this.fallSpeed = body.velocity.y;
+
+    // Lock horizontal speed at the moment of takeoff. This is what stops you from
+    // tapping run in mid-air to accelerate — air speed can't exceed launch speed.
+    if (!onGround && this.wasOnGround) {
+      this.airSpeedCap = Math.max(WALK_SPEED, Math.abs(body.velocity.x));
+    }
 
     // Track grounded state for coyote time
     if (onGround) {
@@ -235,12 +248,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.isJumping = false;
     }
 
-    // Horizontal movement
-    const targetSpeed = input.run ? RUN_SPEED : WALK_SPEED;
+    // Duck / slide when holding down on the ground (jump cancels it).
+    const ducking = onGround && input.down && !this.isJumping;
+    this.applyDuckBody(ducking);
+
+    // Horizontal movement. In the air the top speed is clamped to the launch
+    // speed (airSpeedCap), so you keep run momentum but can't gain new speed.
+    const groundTarget = input.run ? RUN_SPEED : WALK_SPEED;
+    const targetSpeed = onGround ? groundTarget : this.airSpeedCap;
     const accel = onGround ? ACCELERATION : AIR_ACCELERATION;
     const decel = onGround ? DECELERATION : AIR_DECELERATION;
 
-    if (input.left) {
+    if (ducking) {
+      // No new acceleration: a fast duck coasts into a slide, a slow one stops.
+      const speed = Math.abs(body.velocity.x);
+      const slideDecel = speed > SLIDE_SPEED_THRESHOLD ? SLIDE_DECEL : DUCK_STOP_DECEL;
+      if (body.velocity.x > 0) body.velocity.x = Math.max(0, body.velocity.x - slideDecel * (delta / 1000));
+      else if (body.velocity.x < 0) body.velocity.x = Math.min(0, body.velocity.x + slideDecel * (delta / 1000));
+      if (speed > SLIDE_SPEED_THRESHOLD && Math.random() < 0.25) this.spawnDust(this.x, body.bottom, 2);
+    } else if (input.left) {
       if (body.velocity.x > 0) {
         // Turning around - faster decel
         body.velocity.x -= decel * 1.5 * (delta / 1000);
@@ -278,7 +304,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const stretchY = 1 + velocityStretch * 0.15;
     const squashX = 1 - velocityStretch * 0.1;
 
-    if (!onGround) {
+    if (ducking) {
+      // Crouch pose: squat down, fixed.
+      this.setScale(1.18, 0.55 * baseScaleY);
+    } else if (!onGround) {
       // In air - stretch based on vertical velocity
       this.setScale(Math.max(0.85, squashX), Math.min(1.2, stretchY) * baseScaleY);
     } else if (justLanded && !wasPounding) {
@@ -298,8 +327,26 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Drive the animation state machine
     if (time < this.hurtUntil) this.setAnimState('hurt');
     else if (!onGround) this.setAnimState('jump');
+    else if (ducking) this.setAnimState('idle');
     else if (Math.abs(body.velocity.x) > 25) this.setAnimState('walk');
     else this.setAnimState('idle');
+  }
+
+  // Shrinks the physics body so a duck/slide fits under low gaps; restores it on
+  // stand. Feet stay planted (bottom edge fixed) for both small and big forms.
+  private applyDuckBody(active: boolean): void {
+    if (active === this.isDucking) return;
+    this.isDucking = active;
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    if (!body) return;
+    if (active) {
+      if (this.isPoweredUp) { body.setSize(28, 24); body.setOffset(2, 24); }
+      else { body.setSize(28, 14); body.setOffset(2, 34); }
+    } else if (this.isPoweredUp) {
+      body.setSize(28, 44); body.setOffset(2, 4);
+    } else {
+      body.setSize(28, 24); body.setOffset(2, 24);
+    }
   }
 
   enterBubble(): void {
@@ -450,6 +497,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private shrink(): void {
     this.isPoweredUp = false;
+    this.isDucking = false;
 
     const body = this.body as Phaser.Physics.Arcade.Body;
     if (body) {
@@ -475,6 +523,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.health = 0.5;
     this.isInvincible = false;
     this.isPoweredUp = false;
+    this.isDucking = false;
 
     // Shrink back to small size
     const body = this.body as Phaser.Physics.Arcade.Body;
@@ -489,6 +538,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.isPoweredUp) return; // Already powered up
 
     this.isPoweredUp = true;
+    this.isDucking = false;
     this.health = 1.0; // Full 4 health bars
     audio.powerUp();
 
@@ -535,6 +585,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   setInitialState(health: number, isPoweredUp: boolean): void {
     this.health = health;
     this.isPoweredUp = isPoweredUp;
+    this.isDucking = false;
 
     const body = this.body as Phaser.Physics.Arcade.Body;
     if (isPoweredUp) {

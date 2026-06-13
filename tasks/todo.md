@@ -1,3 +1,21 @@
+# Playtest round 2 (v0.6.1) — DONE
+
+From live 2-player feedback. All verified with Playwright + direct physics drives.
+
+- [x] **Coins in ground** → `liftCoins()` post-pass in HybridGenerator nudges any
+      coin out of solid terrain to the first open cell.
+- [x] **Shift mid-air speeds you up** → horizontal speed is locked at takeoff
+      (`airSpeedCap`); verified run+right in air caps at 200, not 350.
+- [x] **Duck & slide** → hold Down on ground to crouch (hitbox shrinks 12→7) and
+      slide when moving fast; jump cancels it; bot never ducks (sends down:false).
+- [x] **Levels felt samey** → 6 cycling color themes (sky/sun/scenery/terrain) +
+      5 new easy chunks + per-level randomized length / set-piece count / stairs.
+- [x] Fixed themed-sky textures (drew gradients as bands; `fillGradientStyle`
+      doesn't bake into `generateTexture`).
+- [x] tsc + build clean; verified Grassland/Sunset/Night themes render distinctly.
+
+---
+
 # Make it FUN — graphics, sound & juice glow-up (v0.6.0)
 
 Goal: turn the easy-endless co-op base into a game that *feels* great to play

@@ -31,6 +31,11 @@ export class HybridGenerator {
   }
 
   generate(): LevelData {
+    // Per-level variation so an endless run doesn't feel samey: vary how many
+    // hand-crafted moments appear and how long the level is.
+    this.config.chunkCount = 4 + Math.floor(Math.random() * 3);    // 4–6 moments
+    this.config.width = 280 + Math.floor(Math.random() * 5) * 16;  // 280–344 wide
+
     this.initializeTiles();
 
     // Select and place chunks
@@ -43,6 +48,9 @@ export class HybridGenerator {
     // Generate start zone and end zone
     this.generateStartZone();
     this.generateEndZone();
+
+    // Pull any coins out of terrain they ended up inside.
+    this.liftCoins();
 
     const exit = this.generateExit();
 
@@ -319,6 +327,21 @@ export class HybridGenerator {
     this.coinSpawns.push({ x: 12, y: groundY - 3 });
   }
 
+  private liftCoins(): void {
+    const out: CoinSpawn[] = [];
+    for (const c of this.coinSpawns) {
+      const gx = Math.round(c.x);
+      if (gx < 0 || gx >= this.config.width) { out.push(c); continue; }
+      let gy = Math.round(c.y);
+      let guard = 0;
+      // Walk up out of any solid tile to the first open cell.
+      while (gy >= 0 && this.tiles[gy][gx] !== TileType.EMPTY && guard < 10) { gy--; guard++; }
+      if (gy < 0) continue; // fully buried with no air above -> drop it
+      out.push({ x: c.x, y: gy });
+    }
+    this.coinSpawns = out;
+  }
+
   private generateEndZone(): void {
     const groundY = this.config.height - 2;
     const baseY = this.config.height - 1;
@@ -330,8 +353,8 @@ export class HybridGenerator {
       this.tiles[baseY][x] = TileType.GROUND;
     }
 
-    // Classic ascending staircase
-    const maxStairHeight = 8;
+    // Classic ascending staircase (height varies a little per level)
+    const maxStairHeight = 5 + Math.floor(Math.random() * 4);
     for (let step = 0; step < maxStairHeight; step++) {
       const stepX = stairStartX + step;
       if (stepX >= this.config.width - 3) break;

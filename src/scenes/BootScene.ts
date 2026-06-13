@@ -342,14 +342,40 @@ export class BootScene extends Phaser.Scene {
   }
 
   private buildScenery(): void {
-    // Vertical sky gradient (stretched across the world in-scene).
-    let g = this.make.graphics({ x: 0, y: 0 });
-    g.fillGradientStyle(0x5aa9ff, 0x5aa9ff, 0xbfe6ff, 0xbfe6ff, 1);
-    g.fillRect(0, 0, 16, 720);
-    g.generateTexture('sky', 16, 720); g.destroy();
+    // Vertical sky gradients, one per level theme (stretched across the world).
+    const skies: Array<[string, number, number]> = [
+      ['sky',        0x5aa9ff, 0xbfe6ff], // grassland day
+      ['sky_sunset', 0x5b4a8a, 0xffa566], // purple -> orange
+      ['sky_dusk',   0x3a3a6e, 0xb87fae], // dusky violet
+      ['sky_night',  0x0b1030, 0x26407a], // deep night
+      ['sky_snow',   0x8fb6e0, 0xe6f1ff], // pale cold
+      ['sky_cave',   0x141021, 0x3a3450], // dark cavern
+    ];
+    // Draw the gradient as interpolated horizontal bands. (Graphics
+    // fillGradientStyle is a vertex-tint effect that doesn't bake into
+    // generateTexture, so we lerp the colors ourselves.)
+    const lerpColor = (a: number, b: number, t: number): number => {
+      const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+      const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+      const r = Math.round(ar + (br - ar) * t);
+      const gg = Math.round(ag + (bg - ag) * t);
+      const bl = Math.round(ab + (bb - ab) * t);
+      return (r << 16) | (gg << 8) | bl;
+    };
+    for (const [key, top, bottom] of skies) {
+      const sky = this.make.graphics({ x: 0, y: 0 });
+      const bands = 96;
+      const bandH = 720 / bands;
+      for (let i = 0; i < bands; i++) {
+        sky.fillStyle(lerpColor(top as number, bottom as number, i / (bands - 1)), 1);
+        sky.fillRect(0, Math.floor(i * bandH), 16, Math.ceil(bandH) + 1);
+      }
+      sky.generateTexture(key as string, 16, 720);
+      sky.destroy();
+    }
 
     // Sun with soft glow.
-    g = this.make.graphics({ x: 0, y: 0 });
+    let g = this.make.graphics({ x: 0, y: 0 });
     g.fillStyle(0xfff3b0, 0.25); g.fillCircle(60, 60, 58);
     g.fillStyle(0xfff3b0, 0.4); g.fillCircle(60, 60, 44);
     g.fillStyle(0xffe066, 1); g.fillCircle(60, 60, 32);

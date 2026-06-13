@@ -18,6 +18,8 @@ import type { Threat } from '../systems/BotController';
 import { buildSettings, parseSettingsFromURL } from '../settings';
 import type { GameSettings, PlayerState } from '../settings';
 import { audio } from '../systems/AudioSynth';
+import { themeForLevel } from '../levels/themes';
+import type { Theme } from '../levels/themes';
 
 // Tethered camera settings
 const MAX_PLAYER_DISTANCE = 900;
@@ -40,6 +42,7 @@ export class GameScene extends Phaser.Scene {
   private inputManager!: InputManager;
   private levelLoader!: LevelLoader;
   private settings!: GameSettings;
+  private theme!: Theme;
   private botControllers: (BotController | null)[] = [];
   private playerCount: number = 1; // Default to 1 player
   private initialPlayerStates: PlayerState[] = []; // For level persistence
@@ -138,6 +141,9 @@ export class GameScene extends Phaser.Scene {
       console.log('Loaded hybrid level');
     }
 
+    // Per-level visual theme (sky + scenery + terrain tint).
+    this.theme = themeForLevel(this.settings.levelNumber);
+
     // Decorative parallax background (clouds, hills, bushes)
     this.createBackground();
 
@@ -167,6 +173,9 @@ export class GameScene extends Phaser.Scene {
 
     // Create debug UI
     this.createUI();
+
+    // Recolor terrain to the level theme (after all tiles exist).
+    this.applyTerrainTint();
 
     // Music (the level-intro banner is drawn by HudScene).
     audio.startMusic();
@@ -822,35 +831,49 @@ export class GameScene extends Phaser.Scene {
   private createBackground(): void {
     const { width, height } = this.levelLoader.getWorldSize();
     const groundTop = height - 64; // top of the 2-tile ground band
+    const theme = this.theme;
+    const skyKey = this.textures.exists(theme.sky) ? theme.sky : 'sky';
 
     // Sky gradient pinned to the camera (covers the whole view).
-    if (this.textures.exists('sky')) {
-      this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'sky')
-        .setScrollFactor(0).setDepth(-20).setDisplaySize(GAME_WIDTH + 4, GAME_HEIGHT + 4);
-    }
-    // Sun (slow parallax).
-    if (this.textures.exists('sun')) {
-      this.add.image(180, 140, 'sun').setScrollFactor(0.08).setDepth(-19).setScale(1.1).setAlpha(0.95);
+    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, skyKey)
+      .setScrollFactor(0).setDepth(-20).setDisplaySize(GAME_WIDTH + 4, GAME_HEIGHT + 4);
+
+    // Sun (slow parallax; hidden at night/in caves).
+    if (theme.sunAlpha > 0 && this.textures.exists('sun')) {
+      this.add.image(180, 140, 'sun').setScrollFactor(0.08).setDepth(-19).setScale(1.1).setAlpha(theme.sunAlpha);
     }
 
     // Clouds (far parallax)
     for (let x = 120; x < width; x += 340) {
       const step = Math.floor(x / 340);
       this.add.image(x, 60 + (step % 3) * 46, 'cloud')
-        .setScrollFactor(0.35).setDepth(-12).setAlpha(0.95)
+        .setScrollFactor(0.35).setDepth(-12).setAlpha(0.95).setTint(theme.cloud)
         .setScale(0.8 + (step % 2) * 0.5);
     }
     // Hills (mid parallax)
     for (let x = 220; x < width; x += 540) {
       this.add.image(x, groundTop, 'hill')
-        .setOrigin(0.5, 1).setScrollFactor(0.6).setDepth(-11).setScale(2.6);
+        .setOrigin(0.5, 1).setScrollFactor(0.6).setDepth(-11).setScale(2.6).setTint(theme.hill);
     }
     // Bushes planted on actual ground (near, moves with the world)
     for (let x = 360; x < width; x += 280) {
       if (!this.isSolidAt(x, groundTop + 16)) continue;
       this.add.image(x, groundTop, 'bush')
-        .setOrigin(0.5, 1).setScrollFactor(1).setDepth(-10);
+        .setOrigin(0.5, 1).setScrollFactor(1).setDepth(-10).setTint(theme.bush);
     }
+  }
+
+  // Tint the ground + platform tiles to the level's theme (pipes keep their green
+  // identity; bricks/blocks/coins keep theirs).
+  private applyTerrainTint(): void {
+    const tint = this.theme.ground;
+    this.levelLoader.getGroundGroup().getChildren().forEach((child) => {
+      const s = child as Phaser.Physics.Arcade.Sprite;
+      if (s.texture && s.texture.key === 'ground') s.setTint(tint);
+    });
+    this.levelLoader.getPlatformGroup().getChildren().forEach((child) => {
+      (child as Phaser.Physics.Arcade.Sprite).setTint(tint);
+    });
   }
 
   private createBots(): void {

@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-06-13
+
+Playtest fixes and variety, from real 2-player feedback.
+
+### Added
+
+- **Duck & slide**: hold Down on the ground to crouch (shrinks the hitbox to fit
+  under low gaps); duck while moving fast and you coast into a slide with dust.
+- **Per-level visual themes** that cycle each level — Grassland, Sunset, Dusk,
+  Night, Snow, Cavern — recoloring the sky gradient, sun, scenery, and terrain so
+  an endless run actually feels like it's going somewhere.
+- **More level variety**: 5 new easy chunks (gentle hills, coin pockets, low
+  platforms, a single pipe, a question pair), plus per-level randomized length,
+  number of set-pieces, and end-staircase height.
+
+### Fixed
+
+- **Coins embedded in terrain**: hybrid levels now lift any coin out of a raised
+  floor or step up to the first open cell (chunk/bridge coin data could otherwise
+  bury them).
+- **Mid-air run exploit**: tapping Run in the air no longer accelerates you. Your
+  horizontal speed is now locked to whatever you launched with — keep run
+  momentum, but you can't gain new speed off the ground.
+- Themed sky gradients now bake correctly into their textures (Phaser's
+  `fillGradientStyle` is a vertex effect that doesn't survive `generateTexture`,
+  so the gradients are drawn as interpolated bands instead).
+
 ## [0.6.0] - 2026-06-13
 
 A "make it actually fun to play" pass: sound, characters, and game feel.

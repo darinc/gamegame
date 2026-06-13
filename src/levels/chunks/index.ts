@@ -320,6 +320,143 @@ export const enemyRush: LevelChunk = {
   ],
 };
 
+// Gentle rolling bumps — easy walk-over with coins above.
+export const gentleHills: LevelChunk = {
+  name: 'gentle_hills',
+  width: 14,
+  height: 12,
+  entryHeight: 2,
+  exitHeight: 2,
+  difficulty: 1,
+  tags: ['transition'],
+  tiles: [
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,1,1,0,0,0,0,1,1,1,0,0],
+    [0,0,0,1,1,0,0,0,0,1,1,1,0,0],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ],
+  coinSpawns: [
+    { x: 3.5, y: 6 }, { x: 6.5, y: 7 }, { x: 10, y: 6 },
+  ],
+};
+
+// A low coin row flanked by two bricks — pure reward, no risk.
+export const coinPocket: LevelChunk = {
+  name: 'coin_pocket',
+  width: 10,
+  height: 12,
+  entryHeight: 2,
+  exitHeight: 2,
+  difficulty: 1,
+  tags: ['reward'],
+  tiles: [
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,2,0,0,0,0,2,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1],
+  ],
+  coinSpawns: [
+    { x: 3, y: 9 }, { x: 4, y: 9 }, { x: 5, y: 9 }, { x: 6, y: 9 },
+  ],
+};
+
+// Two friendly stepping platforms with coins to grab.
+export const lowPlatforms: LevelChunk = {
+  name: 'low_platforms',
+  width: 14,
+  height: 12,
+  entryHeight: 2,
+  exitHeight: 2,
+  difficulty: 2,
+  tags: ['platforming', 'reward'],
+  tiles: [
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,4,4,4,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,4,4,4,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ],
+  coinSpawns: [
+    { x: 4, y: 5 }, { x: 5, y: 5 }, { x: 10, y: 3 }, { x: 11, y: 3 },
+  ],
+};
+
+// A single short pipe — a gentle hop with a coin reward.
+export const singlePipe: LevelChunk = {
+  name: 'single_pipe',
+  width: 9,
+  height: 12,
+  entryHeight: 2,
+  exitHeight: 2,
+  difficulty: 1,
+  tags: ['transition'],
+  tiles: [
+    [0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,6,6,0,0,0],
+    [0,0,0,0,6,6,0,0,0],
+    [0,0,0,0,0,0,0,0,0],
+    [1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1],
+  ],
+  coinSpawns: [
+    { x: 2, y: 8 }, { x: 7, y: 8 },
+  ],
+};
+
+// A pair of reachable question/brick blocks at jump height.
+export const questionPair: LevelChunk = {
+  name: 'question_pair',
+  width: 10,
+  height: 12,
+  entryHeight: 2,
+  exitHeight: 2,
+  difficulty: 2,
+  tags: ['reward'],
+  tiles: [
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,3,0,2,0,3,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0],
+    [1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1],
+  ],
+};
+
 // All chunks organized by category
 export const allChunks: LevelChunk[] = [
   stairClimb,
@@ -333,6 +470,11 @@ export const allChunks: LevelChunk[] = [
   brickPyramid,
   steppingStones,
   enemyRush,
+  gentleHills,
+  coinPocket,
+  lowPlatforms,
+  singlePipe,
+  questionPair,
 ];
 
 // Get chunks by tag
