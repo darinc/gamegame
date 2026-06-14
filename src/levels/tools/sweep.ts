@@ -8,6 +8,7 @@
 //   npx tsx src/levels/tools/sweep.ts            # default 1000 seeds at level 1
 //   npx tsx src/levels/tools/sweep.ts 5000       # 5000 seeds at level 1
 //   npx tsx src/levels/tools/sweep.ts 2000 3     # 2000 seeds at level 3
+//   npx tsx src/levels/tools/sweep.ts 2000 8 4   # 2000 seeds at level 8, difficulty tier 4 (Hard)
 //
 // This is a TOOL, not app code: it is never imported by GameScene / the Vite app graph (Vite's
 // bundle only includes modules reachable from index.html), so it stays out of the browser
@@ -36,6 +37,7 @@ declare const process: {
 interface SweepSummary {
   count: number;
   level: number;
+  difficulty?: number;
   passed: number;
   failed: number;
   failures: string[];
@@ -50,7 +52,7 @@ function percentile(sorted: number[], q: number): number {
   return sorted[i];
 }
 
-export function runSweep(count: number, level: number): SweepSummary {
+export function runSweep(count: number, level: number, difficulty?: number): SweepSummary {
   const table = buildReachableTable();
   const timings: number[] = [];
   const failures: string[] = [];
@@ -58,7 +60,7 @@ export function runSweep(count: number, level: number): SweepSummary {
 
   for (let seed = 1; seed <= count; seed++) {
     const t0 = performance.now();
-    const lvl = generateDirectedLevel(seed, level);
+    const lvl = generateDirectedLevel(seed, level, undefined, difficulty);
     const result = validate(lvl, { table });
     const t1 = performance.now();
     timings.push(t1 - t0);
@@ -77,6 +79,7 @@ export function runSweep(count: number, level: number): SweepSummary {
   return {
     count,
     level,
+    difficulty,
     passed,
     failed: count - passed,
     failures,
@@ -89,9 +92,12 @@ export function runSweep(count: number, level: number): SweepSummary {
 function main(): void {
   const count = Number.parseInt(process.argv[2] ?? '', 10) || 1000;
   const level = Number.parseInt(process.argv[3] ?? '', 10) || 1;
+  const difficultyArg = Number.parseInt(process.argv[4] ?? '', 10);
+  const difficulty = Number.isNaN(difficultyArg) ? undefined : difficultyArg;
 
-  console.log(`Running solvability sweep: ${count} seeds at level ${level}...`);
-  const s = runSweep(count, level);
+  const diffLabel = difficulty === undefined ? 'default (no scaling)' : `tier ${difficulty}`;
+  console.log(`Running solvability sweep: ${count} seeds at level ${level}, difficulty ${diffLabel}...`);
+  const s = runSweep(count, level, difficulty);
 
   console.log('');
   console.log(`  passed:  ${s.passed}/${s.count}`);

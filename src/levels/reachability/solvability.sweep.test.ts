@@ -134,6 +134,62 @@ describe('U10 sweep: full-pipeline determinism (R9)', () => {
   });
 });
 
+// --- Difficulty axis (U4, R2/R8) ------------------------------------------------------------
+// The ramp must keep every level solvable from both spawns at every difficulty tier, and must NOT
+// silently collapse hard levels to the bare flat spine (a ramp that degrades is "plain" again). We
+// also re-prove determinism on the new (seed, level, difficulty) input.
+
+describe('U10 sweep: solvable + deterministic across difficulty tiers (U4, R2/R8)', () => {
+  const TIERS = [1, 2, 4]; // Easy / Normal / Hard (menu tiers)
+  const LEVELS = [8, 20]; // mid-game + late, where the ramp is fully engaged
+  const SEEDS = 40;
+
+  it('every (seed, level, tier) level passes the validator with 2 spawns + an exit', () => {
+    const failures: string[] = [];
+    let total = 0;
+    for (const diff of TIERS) {
+      for (const lvl of LEVELS) {
+        for (let seed = 1; seed <= SEEDS; seed++) {
+          total++;
+          const level = generateDirectedLevel(seed, lvl, undefined, diff);
+          const v = validate(level, { table });
+          if (!v.ok) failures.push(`(seed=${seed}, lvl=${lvl}, diff=${diff}): ${v.reason}`);
+          else if (level.playerSpawns.length !== 2 || !level.exit) {
+            failures.push(`(seed=${seed}, lvl=${lvl}, diff=${diff}): bad co-op shape`);
+          }
+        }
+      }
+    }
+    expect(failures.slice(0, 10), `${failures.length}/${total} failed`).toEqual([]);
+  });
+
+  it('the ramp produces real content, not flat-spine fallbacks (degrade rate stays low)', () => {
+    let degraded = 0;
+    let total = 0;
+    for (const diff of TIERS) {
+      for (const lvl of LEVELS) {
+        for (let seed = 1; seed <= SEEDS; seed++) {
+          total++;
+          const level = generateDirectedLevel(seed, lvl, undefined, diff);
+          if (level.name.includes('spine')) degraded++;
+        }
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[U10 sweep] difficulty degrade rate: ${degraded}/${total}`);
+    // A ramp that collapses to the bare spine has re-introduced "plain": keep it near zero.
+    expect(degraded).toBeLessThanOrEqual(Math.ceil(total * 0.02));
+  });
+
+  it('is deterministic per (seed, level, difficulty) — byte-identical re-generation', () => {
+    for (const [seed, lvl, diff] of [[1, 8, 4], [7, 20, 2], [42, 12, 4]] as [number, number, number][]) {
+      const a = generateDirectedLevel(seed, lvl, undefined, diff);
+      const b = generateDirectedLevel(seed, lvl, undefined, diff);
+      expect(b, `non-determinism at (seed=${seed}, lvl=${lvl}, diff=${diff})`).toEqual(a);
+    }
+  });
+});
+
 // --- Arc legibility (Verifiable-arc Success Criterion) --------------------------------------
 // The realized band sequence must read as a SINGLE dominant peak with easier shoulders. We
 // derive the band sequence from the director outline's beats' bands (the simplest, sufficient

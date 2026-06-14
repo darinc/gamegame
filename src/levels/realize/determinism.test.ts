@@ -52,6 +52,17 @@ describe('generateDirectedLevel: determinism guard (KTD3, R9)', () => {
     }
   });
 
+  it('stays deterministic and Rng-clean with a difficulty supplied (U4, R2)', () => {
+    stubRandomToThrow();
+    for (const [seed, level] of COMBOS) {
+      // The difficulty-scaled path changes RNG outcomes (weighted selection) but must still draw
+      // ONLY from the injected Rng — global Math.random would throw here.
+      const a = generateDirectedLevel(seed, level, undefined, 4);
+      const b = generateDirectedLevel(seed, level, undefined, 4);
+      expect(b).toEqual(a);
+    }
+  });
+
   it('different levels of the same seed differ (the arc varies level to level)', () => {
     const seed = 42;
     const l1 = generateDirectedLevel(seed, 1);
