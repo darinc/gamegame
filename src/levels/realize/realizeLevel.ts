@@ -15,6 +15,7 @@
 import { TileType } from '../types';
 import type { LevelData, SpawnPoint, CoinSpawn, QuestionBlockContent, LevelExit } from '../types';
 import { rngForLevel, Rng } from '../rng';
+import { themeForLevel } from '../themes';
 import { deriveOutline } from '../director/outline';
 import type { Outline } from '../director/outline';
 import { buildReachableTable } from '../reachability/reachableTable';
@@ -219,7 +220,9 @@ export function generateDirectedLevel(seed: number, levelNumber: number, theme?:
   // Outline derivation uses the BASE-seed Rng so the stateless previous-level exclusion matches
   // (see Director.ts / outline.ts). The realization substreams fork off the per-level Rng.
   const base = new Rng(seed >>> 0);
-  const themeName = theme ?? 'overworld';
+  // Theme is level-LOCKED (KTD14): when no explicit theme is given, use the deterministic
+  // themeForLevel selection so each level realizes with its structural recipe (Cavern, Sky, ...).
+  const themeName = theme ?? themeForLevel(levelNumber).name;
   const outline = deriveOutline(base, levelNumber, themeName);
 
   const levelRng = rngForLevel(seed, levelNumber);

@@ -16,6 +16,8 @@ import { Band, bandRank } from './bands';
 import type { Band as BandT } from './bands';
 import { CURVE_ARCHETYPES, GENTLE_OPENER, bandSequenceFor } from './curves';
 import type { CurveArchetype } from './curves';
+import { getThemeRecipe } from '../themes';
+import type { CeilingPressure } from '../themes';
 import type { Rng } from '../rng';
 import type { VerticalityClass } from '../types';
 
@@ -77,11 +79,20 @@ function roleForBeat(band: BandT, index: number, total: number, isClimax: boolea
   return 'traversal';
 }
 
-function verticalityForBeat(rng: Rng, band: BandT): VerticalityClass {
+function verticalityForBeat(rng: Rng, band: BandT, ceilingPressure: CeilingPressure): VerticalityClass {
   // Harder bands lean more vertical; easy beats stay mostly flat. Probabilities are coarse and
   // hand-set (KTD9 spirit) — verticality granularity is flat/stepped/high (Open Questions).
+  //
+  // The theme's ceilingPressure (U8, KTD14) nudges the roll: 'high' (Cavern) shifts toward more
+  // vertical/low beats, 'none' (Sky) toward flatter/open beats. The shift is applied to the roll
+  // so easy never reaches 'high' (preserving the director's emitted-cell matrix) — it only moves
+  // weight between flat<->stepped and stepped<->high.
   const rank = bandRank(band); // 0 easy, 1 medium, 2 peak
-  const roll = rng.next();
+  // bias > 0 pushes toward flatter (lower the roll's effective threshold-clearing); we instead
+  // shift the roll itself: subtract for 'high' (more likely to exceed flat thresholds), add for
+  // 'none' (more likely to stay flat).
+  const shift = ceilingPressure === 'high' ? -0.2 : ceilingPressure === 'none' ? 0.2 : 0;
+  const roll = Math.min(0.999, Math.max(0, rng.next() + shift));
   if (rank === 0) return roll < 0.7 ? 'flat' : 'stepped';
   if (rank === 1) return roll < 0.45 ? 'flat' : roll < 0.85 ? 'stepped' : 'high';
   return roll < 0.5 ? 'stepped' : 'high';
@@ -161,10 +172,13 @@ export function deriveOutline(rng: Rng, levelNumber: number, theme: string): Out
   // archetype/width/count streams so they don't desync each other (KTD3).
   const beatRng = rng.fork(`beats:level:${levelNumber}`);
 
+  // The theme recipe (KTD14) biases verticality toward / away from vertical+low-ceiling beats.
+  const ceilingPressure = getThemeRecipe(theme).ceilingPressure;
+
   const beats: Beat[] = bands.map((band, index) => {
     const isClimax = index === climaxIndex;
     const role = roleForBeat(band, index, bands.length, isClimax);
-    const verticality = verticalityForBeat(beatRng, band);
+    const verticality = verticalityForBeat(beatRng, band, ceilingPressure);
     const mechanic = mechanicForBeat(beatRng, role, band);
     return { index, band, role, mechanic, verticality, theme };
   });

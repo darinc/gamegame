@@ -20,6 +20,9 @@ import {
   exitGroundHeight,
 } from './analysis';
 import { deriveLevelOutline } from '../director/Director';
+import { isChunkThemeLegal, selectChunk } from '../realize/ChunkRealizer';
+import { THEMES } from '../themes';
+import { Rng } from '../rng';
 import type { BandName, VerticalityClass } from '../types';
 
 // Minimum non-repeating authored candidates required per emitted cell (KTD8's N).
@@ -89,6 +92,54 @@ describe('chunk pool coverage (KTD8)', () => {
     // A real assertion: removing/mis-annotating a chunk that drops a cell below the minimum fails
     // the build. (Tested non-destructively — we just assert the live pool clears the bar.)
     expect(shortfalls, `under-covered cells: ${shortfalls.join('; ')}`).toEqual([]);
+  });
+});
+
+describe('per-theme coverage under theme-legality filtering (U8, KTD14)', () => {
+  const emitted = [...emittedCells()].map((cell) => {
+    const [band, verticality] = cell.split('|') as [BandName, VerticalityClass];
+    return { band, verticality };
+  });
+
+  it('every theme + emitted cell resolves to a theme-legal chunk OR the filler (never starves)', () => {
+    // KTD8/KTD14: after legality filtering partitions the pool per theme, every cell the director
+    // emits must still resolve via the fallback ladder — to a theme-legal authored chunk where one
+    // exists, otherwise to the always-legal flat filler. The ladder must never throw for any theme.
+    const starved: string[] = [];
+    for (const theme of THEMES) {
+      for (const { band, verticality } of emitted) {
+        const sel = selectChunk(band, verticality, theme.name, new Rng(1));
+        // Always a defined result (a chunk selection or the filler sentinel).
+        expect('rung' in sel, `${theme.name} ${band}|${verticality} returned no rung`).toBe(true);
+        if ('chunk' in sel) {
+          // A selected chunk must itself be theme-legal (legality was applied during selection).
+          expect(
+            isChunkThemeLegal(sel.chunk, theme.name),
+            `${theme.name}: selected illegal chunk ${sel.chunk.name}`,
+          ).toBe(true);
+        } else {
+          // No authored chunk anywhere in the legal pool covered this cell -> filler. Record it so
+          // the assertion below documents which theme/cell relies on the filler path.
+          starved.push(`${theme.name}:${band}|${verticality}`);
+        }
+      }
+    }
+    // The filler path is a legitimate cover (KTD8 rung 4); this just asserts it is the ONLY shortfall
+    // mechanism and that the legality-filtered pool covers the rest. With the current pool no theme
+    // empties a cell all the way to the filler — every emitted cell has a legal authored chunk via
+    // the ladder.
+    expect(starved, `cells relying on the flat filler: ${starved.join(', ')}`).toEqual([]);
+  });
+
+  it('the Sky theme (allowsLowCeiling=false) never selects a low-ceiling chunk for any emitted cell', () => {
+    for (const { band, verticality } of emitted) {
+      for (let s = 0; s < 20; s++) {
+        const sel = selectChunk(band, verticality, 'Sky', new Rng(s));
+        if ('chunk' in sel) {
+          expect(sel.chunk.lowCeiling ?? false, `Sky selected low-ceiling ${sel.chunk.name}`).toBe(false);
+        }
+      }
+    }
   });
 });
 

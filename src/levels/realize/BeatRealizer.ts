@@ -20,7 +20,7 @@
 import type { Rng } from '../rng';
 import type { ReachableTable } from '../reachability/reachableTable';
 import type { Beat } from '../director/outline';
-import type { EnemyType, RewardKind } from '../types';
+import type { EnemyType, RewardKind, BandName } from '../types';
 
 // --- Semantic placement requests ------------------------------------------------------------
 // Coordinates are SEGMENT-LOCAL (col within the segment, row within the full grid height the
@@ -68,6 +68,12 @@ export interface RealizedSegment {
   // Provenance for tests/debug: which authored chunk (if any) and reward kind this came from.
   source: string;
   reward?: RewardKind;
+  // THEME-VS-BAND PRECEDENCE (KTD14): the band the segment ACTUALLY realizes at, which can differ
+  // from the beat's requested band when theme-legality filtering + the fallback ladder re-target to
+  // a nearer achievable band (theme wins). Arc-legibility checks must read this, not the requested
+  // band. For the filler rung this is 'easy' (a flat run). Equals the requested band on the exact
+  // rung.
+  achievedBand: BandName;
 }
 
 // --- The strategy context -------------------------------------------------------------------
