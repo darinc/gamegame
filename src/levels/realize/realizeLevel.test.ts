@@ -3,17 +3,11 @@ import { generateDirectedLevel } from './realizeLevel';
 import { generateDirectedLevel as fromDirector } from '../director/Director';
 import { buildReachableTable } from '../reachability/reachableTable';
 import { validate } from '../reachability/validator';
-import { TileType } from '../types';
+import { TileType, COLLIDABLE_SOLID } from '../types';
 
 const table = buildReachableTable();
 
-const SOLID = new Set<number>([
-  TileType.GROUND,
-  TileType.PLATFORM,
-  TileType.PIPE,
-  TileType.BRICK,
-  TileType.QUESTION,
-]);
+const SOLID = COLLIDABLE_SOLID;
 
 // 30+ distinct (seed, level) combos.
 const combos: [number, number][] = [];

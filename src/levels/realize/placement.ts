@@ -18,7 +18,7 @@
 // The invariant the whole layer guarantees: after resolution, ZERO returned spawns intersect a
 // solid tile, and every enemy stands on a floor.
 
-import { TileType, EnemyType } from '../types';
+import { TileType, EnemyType, COLLIDABLE_SOLID } from '../types';
 import type { CoinSpawn, SpawnPoint, QuestionBlockContent } from '../types';
 
 // Minimum standable runway (tiles, including the foot tile) a patrol enemy needs to be non-trapped.
@@ -30,13 +30,7 @@ export const PATROL_RUNWAY = 3;
 export const BULL_CHARGE_LANE = 4;
 export const BULL_MIN_RUNWAY = 2;
 
-const SOLID = new Set<number>([
-  TileType.GROUND,
-  TileType.PLATFORM,
-  TileType.PIPE,
-  TileType.BRICK,
-  TileType.QUESTION,
-]);
+const SOLID = COLLIDABLE_SOLID;
 
 export interface PlacementGrid {
   tiles: number[][];

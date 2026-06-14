@@ -10,31 +10,23 @@
 // the bottom row is the floor; "height (tiles from bottom)" of a surface = grid height minus the
 // row index of its top solid tile.
 
-import { TileType } from '../types';
+import { TileType, TERRAIN_SOLID, COLLIDABLE_SOLID } from '../types';
 import type { LevelChunk, BandName, VerticalityClass } from '../types';
 import { scoreBand } from '../director/bands';
 import type { SegmentFeatures } from '../director/bands';
+import { STAND_CLEARANCE_TILES } from '../../physics';
 
-// Tiles a player can STAND on / that act as the terrain floor + walls, matching how LevelLoader
-// makes tiles collidable as static terrain (GROUND / PLATFORM / PIPE) — see LevelLoader.ts:65-86.
-// Used for surface heights, gaps, and the height-step profile.
-const SOLID = new Set<number>([TileType.GROUND, TileType.PLATFORM, TileType.PIPE]);
+// Walkable terrain floor + walls (GROUND / PLATFORM / PIPE), for surface heights, gaps, and the
+// height-step profile. Headroom obstruction (low ceilings) uses the broader collidable set —
+// bricks and question blocks are head-bonk obstacles you can't stand on; that broader set is what
+// U8's Sky theme-legality filter ("no low ceilings") reasons about.
+const SOLID = TERRAIN_SOLID;
+const CEILING = COLLIDABLE_SOLID;
 
-// Tiles that OBSTRUCT headroom above a standing player. Broader than SOLID: bricks and question
-// blocks are collidable obstacles you bonk your head on (LevelLoader.ts:60-76), so they form a
-// low ceiling even though you can't stand ON them as terrain. Used only by hasLowCeiling — this
-// is the set U8's Sky theme-legality filter ("no low ceilings") reasons about.
-const CEILING = new Set<number>([
-  TileType.GROUND,
-  TileType.PLATFORM,
-  TileType.PIPE,
-  TileType.BRICK,
-  TileType.QUESTION,
-]);
-
-// Standing body needs ~2 tiles of headroom under the KTD6 no-ducking invariant; a solid tile
-// within this distance above a standable surface is a low ceiling.
-export const STAND_CLEARANCE_TILES = 2;
+// Standing-body headroom (KTD6) — sourced from the single physics constant so the chunk coverage
+// check and the reachability validator can't disagree on what "passable" means; re-exported for
+// existing importers of this module.
+export { STAND_CLEARANCE_TILES };
 
 /**
  * Height (tiles from bottom) of the contiguous SOLID stack rising from the floor at column

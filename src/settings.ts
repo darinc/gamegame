@@ -18,6 +18,7 @@ export interface GameSettings {
   difficulty: number;        // generator difficulty (easy ~ 2)
   levelName?: string;        // used when genMode === 'named'
   levelNumber: number;       // 1-based, increments each completed level (endless)
+  seed?: number;             // director base seed; from ?seed, else a random session seed (U9)
 
   // State carried between levels
   lives: number;
@@ -96,7 +97,7 @@ export function parseSettingsFromURL(): Partial<GameSettings> {
   if (difficulty) out.difficulty = clamp(parseInt(difficulty, 10) || 2, 1, 10);
 
   const seed = p.get('seed');
-  if (seed) (out as Record<string, unknown>).seed = parseInt(seed, 10);
+  if (seed) out.seed = parseInt(seed, 10);
 
   return out;
 }

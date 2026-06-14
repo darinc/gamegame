@@ -15,6 +15,7 @@ import {
   GRAVITY,
   DESIGN_APEX_TILES,
   MAX_JUMP_HOLD_TIME,
+  STAND_CLEARANCE_TILES,
   speedFor,
   simulateJumpArc,
   type SpeedClass,
@@ -23,10 +24,9 @@ import {
 
 export type { SpeedClass } from '../../physics';
 
-// Standing-body headroom required at any standable position on a required path. The big
-// (powered) body is ~44px ~= 2 tiles; designing to 2 keeps a standing path under the KTD6
-// no-ducking invariant. Jumps that rise higher need more clearance (computed per arc).
-export const STAND_CLEARANCE_TILES = 2;
+// Standing-body headroom (KTD6) — single source of truth is src/physics.ts. Re-exported here so
+// existing importers of this module keep working.
+export { STAND_CLEARANCE_TILES };
 
 // The real jump is floatier than the brainstorm's ~4-tile estimate (full hold measures ~6.7
 // tiles; see reachableTable.test.ts), so horizontal airtime — and thus reach — is generous.

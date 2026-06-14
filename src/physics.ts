@@ -31,6 +31,11 @@ export const TILE = 32; // px per tile
 // (no-hold floor ~2.3); designing connectors to 3 leaves margin (R8, KTD5/KTD6).
 export const DESIGN_APEX_TILES = 3;
 
+// Standing-body headroom (tiles) required at any standable position under the no-ducking
+// invariant (KTD6). Single source of truth: the reachable table, the validator, and chunk
+// geometry analysis all import this so their notion of "passable while standing" can't diverge.
+export const STAND_CLEARANCE_TILES = 2;
+
 // Phaser arcade runs a fixed 60fps step by default; the live game's variable-jump hold force
 // is scaled by delta/16.67, which is ~1.0 per 60fps frame.
 const FIXED_STEP_MS = 1000 / 60;

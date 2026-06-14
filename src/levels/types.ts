@@ -11,6 +11,27 @@ export const TileType = {
 
 export type TileType = typeof TileType[keyof typeof TileType];
 
+// Canonical solid-tile sets (single source of truth; consumed by the reachability validator,
+// chunk geometry analysis, and placement so a future tile type can't be added to one copy and
+// missed in another).
+//   TERRAIN_SOLID   — tiles that act as the walkable floor + walls (how LevelLoader makes static
+//                     terrain collidable: GROUND / PLATFORM / PIPE).
+//   COLLIDABLE_SOLID — everything that obstructs a body, i.e. terrain plus the head-bonk blocks
+//                      (BRICK / QUESTION). Used for "is this cell solid" / ceiling checks.
+export const TERRAIN_SOLID: ReadonlySet<number> = new Set<number>([
+  TileType.GROUND,
+  TileType.PLATFORM,
+  TileType.PIPE,
+]);
+
+export const COLLIDABLE_SOLID: ReadonlySet<number> = new Set<number>([
+  TileType.GROUND,
+  TileType.PLATFORM,
+  TileType.PIPE,
+  TileType.BRICK,
+  TileType.QUESTION,
+]);
+
 // Enemy types
 export const EnemyType = {
   GOOMBA: 'goomba',

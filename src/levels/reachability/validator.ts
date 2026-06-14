@@ -19,10 +19,10 @@
 // decision (bubble has no solid collider today — see the plan's Open Questions). They are not
 // implemented here; this validator asserts only what it can check soundly.
 
-import { TileType } from '../types';
+import { TileType, COLLIDABLE_SOLID } from '../types';
 import type { LevelData } from '../types';
-import { STAND_CLEARANCE_TILES, type ReachableTable, type SpeedClass } from './reachableTable';
-import { DESIGN_APEX_TILES, runwayTilesForRunSpeed } from '../../physics';
+import { type ReachableTable, type SpeedClass } from './reachableTable';
+import { DESIGN_APEX_TILES, runwayTilesForRunSpeed, STAND_CLEARANCE_TILES } from '../../physics';
 
 export interface Region {
   x: number;
@@ -38,13 +38,7 @@ export interface ValidationResult {
   failingRegion?: Region;
 }
 
-const SOLID = new Set<number>([
-  TileType.GROUND,
-  TileType.PLATFORM,
-  TileType.PIPE,
-  TileType.BRICK,
-  TileType.QUESTION,
-]);
+const SOLID = COLLIDABLE_SOLID;
 
 class Grid {
   private readonly level: LevelData;
@@ -154,7 +148,10 @@ interface Edge {
 function reachableCells(grid: Grid, start: { x: number; y: number }, table: ReachableTable): Set<string> {
   const runway = runwayTilesForRunSpeed();
   const visited = new Set<string>();
+  // Index-cursor queue: advancing `head` is O(1), vs Array.shift() which re-indexes the whole
+  // array (O(n)) and made the BFS O(V^2) on a dense ~6.6k-cell grid.
   const queue: { x: number; y: number }[] = [start];
+  let head = 0;
   visited.add(`${start.x},${start.y}`);
 
   // Pre-enumerate table offsets per speed class once.
@@ -169,8 +166,8 @@ function reachableCells(grid: Grid, start: { x: number; y: number }, table: Reac
   // Run-only offsets = reachable at run but not at stand (the extra reach).
   const runOnly = offsets.run.filter((e) => !table.canReach('stand', e.dx, e.dy));
 
-  while (queue.length > 0) {
-    const { x, y } = queue.shift()!;
+  while (head < queue.length) {
+    const { x, y } = queue[head++];
 
     const canRunRight = flatRun(grid, x, y, -1) > runway; // runway to the left -> run rightward
     const canRunLeft = flatRun(grid, x, y, 1) > runway;

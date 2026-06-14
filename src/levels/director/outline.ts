@@ -122,17 +122,22 @@ function mechanicForBeat(rng: Rng, role: Role, band: BandT): string | undefined 
 export function selectArchetype(rng: Rng, levelNumber: number): CurveArchetype {
   if (levelNumber <= 1) return GENTLE_OPENER;
 
-  // Recompute the previous level's archetype statelessly (KTD10).
-  const prev = selectArchetype(rng, levelNumber - 1);
-
-  // Candidate pool excludes the previous archetype. (Level 2's prev is the gentle opener, which
-  // is not in CURVE_ARCHETYPES, so the pool is the full vocabulary there.)
-  const pool = CURVE_ARCHETYPES.filter((a) => a.name !== prev.name);
-  const candidates = pool.length > 0 ? pool : CURVE_ARCHETYPES;
-
-  // Independent per-level stream so adding/removing a draw elsewhere can't shift this choice.
-  const pick = rng.fork(`curve:level:${levelNumber}`);
-  return pick.pick(candidates);
+  // Walk forward from level 1, carrying the previous level's archetype so each level can exclude
+  // it (KTD10). This is the iterative form of the previous-level recompute — it produces the EXACT
+  // same sequence as the old recursion but uses O(1) stack instead of O(levelNumber), so an
+  // endless run can never overflow the call stack (the recursion crashed around level 4798).
+  let prevName = GENTLE_OPENER.name; // level 1
+  let current = GENTLE_OPENER;
+  for (let n = 2; n <= levelNumber; n++) {
+    // Candidate pool excludes the previous archetype. (Level 2's prev is the gentle opener, which
+    // is not in CURVE_ARCHETYPES, so the pool is the full vocabulary there.)
+    const pool = CURVE_ARCHETYPES.filter((a) => a.name !== prevName);
+    const candidates = pool.length > 0 ? pool : CURVE_ARCHETYPES;
+    // Independent per-level stream so adding/removing a draw elsewhere can't shift this choice.
+    current = rng.fork(`curve:level:${n}`).pick(candidates);
+    prevName = current.name;
+  }
+  return current;
 }
 
 // --- Width & beat count -------------------------------------------------------------------

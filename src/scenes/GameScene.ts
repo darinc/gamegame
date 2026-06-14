@@ -132,16 +132,14 @@ export class GameScene extends Phaser.Scene {
     // the GameScene -> LevelComplete -> GameScene round-trip (the settings object is carried
     // forward). This random selection lives on the Phaser side, OUTSIDE the pure director call,
     // so it does not violate the determinism guard (KTD3).
-    const settingsBag = this.settings as unknown as Record<string, unknown>;
-    const carriedSeed = settingsBag.seed;
     let directorBaseSeed: number;
     if (seedParam !== null) {
       directorBaseSeed = parseInt(seedParam, 10);
-    } else if (typeof carriedSeed === 'number') {
-      directorBaseSeed = carriedSeed;
+    } else if (typeof this.settings.seed === 'number') {
+      directorBaseSeed = this.settings.seed;
     } else {
       directorBaseSeed = Math.floor(Math.random() * 1e9);
-      settingsBag.seed = directorBaseSeed;
+      this.settings.seed = directorBaseSeed;
     }
 
     // Initialize level loader and load level

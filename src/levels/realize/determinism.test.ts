@@ -13,6 +13,9 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { generateDirectedLevel } from './realizeLevel';
+import { buildReachableTable } from '../reachability/reachableTable';
+import { validate } from '../reachability/validator';
+import { TileType } from '../types';
 
 const COMBOS: [number, number][] = [
   [1, 1],
@@ -57,6 +60,38 @@ describe('generateDirectedLevel: determinism guard (KTD3, R9)', () => {
     expect(JSON.stringify(l1)).not.toBe(JSON.stringify(l2));
     expect(JSON.stringify(l2)).not.toBe(JSON.stringify(l3));
     expect(JSON.stringify(l1)).not.toBe(JSON.stringify(l3));
+  });
+
+  // Load-bearing invariant (review): the LevelLoader only reads power-up contents deterministically
+  // when EVERY QUESTION tile has a matching questionBlockContents sidecar entry (KTD4). A missing
+  // entry would silently fall back to LevelLoader's legacy Math.random roll, reintroducing per-load
+  // nondeterminism the byte-identical test above can't see (it never renders through LevelLoader).
+  it('every QUESTION tile has a matching questionBlockContents sidecar entry (KTD4)', () => {
+    for (const [seed, level] of COMBOS) {
+      const data = generateDirectedLevel(seed, level);
+      const sidecar = new Set((data.questionBlockContents ?? []).map((c) => `${c.x},${c.y}`));
+      for (let y = 0; y < data.height; y++) {
+        for (let x = 0; x < data.width; x++) {
+          if (data.tiles[y][x] === TileType.QUESTION) {
+            expect(sidecar.has(`${x},${y}`)).toBe(true);
+          }
+        }
+      }
+    }
+  });
+});
+
+// Endless-run robustness (review): the game increments levelNumber without bound, so generation
+// must not blow the call stack or otherwise fail at a high level number (the previous-level
+// archetype recompute once recursed to depth = levelNumber and crashed around level ~4798).
+describe('generateDirectedLevel: high level numbers (endless run)', () => {
+  it('does not throw and stays solvable at very high level numbers', () => {
+    const table = buildReachableTable();
+    for (const level of [1000, 5000, 50000]) {
+      const data = generateDirectedLevel(777, level);
+      expect(data.playerSpawns.length).toBe(2);
+      expect(validate(data, { table }).ok).toBe(true);
+    }
   });
 });
 
