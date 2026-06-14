@@ -31,17 +31,17 @@ export function deriveLevelOutline(seed: number, levelNumber: number, theme: str
 }
 
 /**
- * TODO(U5/U9): realize the outline into LevelData.
+ * Realize the outline into a solvable LevelData (U5, KTD1/KTD2/KTD7).
  *
- * The full director pipeline is outline -> realize -> validate -> emit (KTD1, KTD2, KTD7):
+ * The full director pipeline is outline -> realize -> validate -> emit:
  *   1. deriveLevelOutline(seed, levelNumber, theme)            // U4 (this file)
  *   2. for each beat: BeatRealizer.realize(beat, ctx)          // U5 (ChunkRealizer)
  *   3. bridge adjacencies with table-drawn connectors          // U5
  *   4. resolve semantic placements (typed placement validity)  // U5
- *   5. reachability gate from both co-op spawns + reroll/degrade // U3 + U9
- *   6. emit LevelData (incl. questionBlockContents sidecar)    // U9
+ *   5. reachability gate from both co-op spawns + reroll/degrade // U3 + U5
+ *   6. emit LevelData (incl. questionBlockContents sidecar)    // U5
  *
- * Realization will fork its realizer / overlay-reroll substreams from
- * `rngForLevel(seed, levelNumber)` (the canonical per-level stream, src/levels/rng.ts). That is
- * out of scope for U4 — no geometry is produced here.
+ * Implemented in realize/realizeLevel.ts; re-exported here as the director's public entry point so
+ * GameScene (U9) imports it from the director.
  */
+export { generateDirectedLevel } from '../realize/realizeLevel';
