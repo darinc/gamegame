@@ -33,6 +33,15 @@ export interface CoinSpawn {
   y: number;
 }
 
+// Generation-time decision for a question block's contents (KTD4). Carried as a sidecar
+// array on LevelData (keyed by grid coords) rather than widening TileType, so the tile grid
+// stays a pure terrain array and contents are seed-reproducible.
+export interface QuestionBlockContent {
+  x: number;
+  y: number;
+  containsPowerUp: boolean;
+}
+
 // Level exit
 export interface LevelExit {
   x: number;
@@ -66,6 +75,7 @@ export interface LevelData {
   playerSpawns: SpawnPoint[];
   enemySpawns: SpawnPoint[];
   coinSpawns?: CoinSpawn[];
+  questionBlockContents?: QuestionBlockContent[];
   exit?: LevelExit;
   background?: string;
 }
