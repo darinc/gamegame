@@ -1,7 +1,7 @@
 ---
 title: "feat: Outline-first level generation"
 type: feat
-status: active
+status: completed
 date: 2026-06-14
 deepened: 2026-06-14
 origin: docs/brainstorms/2026-06-13-level-generation-variety-requirements.md
