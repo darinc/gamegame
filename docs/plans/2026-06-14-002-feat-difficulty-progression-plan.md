@@ -1,7 +1,7 @@
 ---
 title: "feat: Difficulty progression (level ramp + menu-selectable difficulty)"
 type: feat
-status: active
+status: completed
 date: 2026-06-14
 ---
 
