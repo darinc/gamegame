@@ -5,6 +5,8 @@ import {
   parseSettingsFromURL,
   shouldAutostart,
   MODE_PRESETS,
+  DIFFICULTY_TIERS,
+  DEFAULT_DIFFICULTY_INDEX,
 } from '../settings';
 import { audio } from '../systems/AudioSynth';
 
@@ -23,9 +25,12 @@ const OPTIONS: MenuOption[] = [
 
 export class TitleScene extends Phaser.Scene {
   private selected = 0;
+  private difficultyIndex = DEFAULT_DIFFICULTY_INDEX;
   private optionTexts: Phaser.GameObjects.Text[] = [];
   private hintText!: Phaser.GameObjects.Text;
+  private difficultyText!: Phaser.GameObjects.Text;
   private prevPadY = 0;
+  private prevPadX = 0;
   private prevPadConfirm = false;
 
   constructor() {
@@ -40,6 +45,7 @@ export class TitleScene extends Phaser.Scene {
     }
 
     this.selected = 0;
+    this.difficultyIndex = DEFAULT_DIFFICULTY_INDEX;
     this.optionTexts = [];
 
     this.drawBackdrop();
@@ -71,7 +77,7 @@ export class TitleScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Menu options
-    const startY = 290;
+    const startY = 258;
     OPTIONS.forEach((opt, i) => {
       const t = this.add.text(GAME_WIDTH / 2, startY + i * 56, opt.label, {
         fontSize: '34px',
@@ -83,7 +89,16 @@ export class TitleScene extends Phaser.Scene {
       this.optionTexts.push(t);
     });
 
-    this.hintText = this.add.text(GAME_WIDTH / 2, startY + OPTIONS.length * 56 + 24, '', {
+    // Difficulty selector (← → to change). Sets GameSettings.difficulty for the run.
+    this.difficultyText = this.add.text(GAME_WIDTH / 2, startY + OPTIONS.length * 56 + 24, '', {
+      fontSize: '28px',
+      color: '#9FE6FF',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 5,
+    }).setOrigin(0.5);
+
+    this.hintText = this.add.text(GAME_WIDTH / 2, startY + OPTIONS.length * 56 + 60, '', {
       fontSize: '20px',
       color: '#FFE08A',
     }).setOrigin(0.5);
@@ -95,7 +110,7 @@ export class TitleScene extends Phaser.Scene {
     ).setOrigin(0.5);
 
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 120,
-      '↑↓ choose      Enter / Jump to start      M mutes      Gamepads supported',
+      '↑↓ choose      ←→ difficulty      Enter / Jump to start      M mutes      Gamepads supported',
       { fontSize: '18px', color: '#cfe8ff', stroke: '#163b6b', strokeThickness: 3 },
     ).setOrigin(0.5);
 
@@ -157,8 +172,19 @@ export class TitleScene extends Phaser.Scene {
     kb.on('keydown-W', () => this.move(-1));
     kb.on('keydown-DOWN', () => this.move(1));
     kb.on('keydown-S', () => this.move(1));
+    kb.on('keydown-LEFT', () => this.cycleDifficulty(-1));
+    kb.on('keydown-A', () => this.cycleDifficulty(-1));
+    kb.on('keydown-RIGHT', () => this.cycleDifficulty(1));
+    kb.on('keydown-D', () => this.cycleDifficulty(1));
     kb.on('keydown-ENTER', () => this.confirm());
     kb.on('keydown-SPACE', () => this.confirm());
+  }
+
+  private cycleDifficulty(dir: number): void {
+    this.difficultyIndex =
+      (this.difficultyIndex + dir + DIFFICULTY_TIERS.length) % DIFFICULTY_TIERS.length;
+    audio.select();
+    this.refresh();
   }
 
   private move(dir: number): void {
@@ -174,15 +200,19 @@ export class TitleScene extends Phaser.Scene {
       t.setColor(on ? '#FFD700' : '#ffffff');
       t.setScale(on ? 1.12 : 1);
     });
-    this.hintText.setText(OPTIONS[this.selected].hint);
+    const tier = DIFFICULTY_TIERS[this.difficultyIndex];
+    this.difficultyText.setText(`◄  DIFFICULTY:  ${tier.label.toUpperCase()}  ►`);
+    // Show the active option's hint, plus the difficulty tier's hint so the choice is explained.
+    this.hintText.setText(`${OPTIONS[this.selected].hint}    (${tier.hint})`);
   }
 
   private confirm(): void {
     const preset = OPTIONS[this.selected].preset;
+    const difficulty = DIFFICULTY_TIERS[this.difficultyIndex].value;
     audio.start();
     this.cameras.main.flash(180, 255, 255, 255);
     this.time.delayedCall(120, () => {
-      this.scene.start('GameScene', buildSettings(MODE_PRESETS[preset]));
+      this.scene.start('GameScene', buildSettings({ ...MODE_PRESETS[preset], difficulty }));
     });
   }
 
@@ -199,6 +229,14 @@ export class TitleScene extends Phaser.Scene {
       if (up && this.prevPadY >= 0) this.move(-1);
       else if (down && this.prevPadY <= 0) this.move(1);
       this.prevPadY = up ? -1 : down ? 1 : 0;
+
+      // Left/right (stick or dpad) cycles the difficulty tier.
+      const x = (pad.axes.length > 0 ? pad.axes[0].getValue() : 0);
+      const left = x < -0.5 || pad.buttons[14]?.pressed;
+      const right = x > 0.5 || pad.buttons[15]?.pressed;
+      if (left && this.prevPadX >= 0) this.cycleDifficulty(-1);
+      else if (right && this.prevPadX <= 0) this.cycleDifficulty(1);
+      this.prevPadX = left ? -1 : right ? 1 : 0;
 
       const confirm = pad.buttons[0]?.pressed || pad.buttons[9]?.pressed; // A/B or Start
       if (confirm && !this.prevPadConfirm) this.confirm();

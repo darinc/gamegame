@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { ChunkRealizer, selectChunk, isChunkThemeLegal } from './ChunkRealizer';
+import { ChunkRealizer, selectChunk, isChunkThemeLegal, applyDifficulty } from './ChunkRealizer';
 import type { RealizeContext } from './BeatRealizer';
 import { Rng } from '../rng';
 import { buildReachableTable } from '../reachability/reachableTable';
-import { Band } from '../director/bands';
+import { Band, bandRank } from '../director/bands';
+import { difficultyParams, IDENTITY_PARAMS } from '../director/difficulty';
+import { getThemeRecipe } from '../themes';
+import { EnemyType } from '../types';
 import type { Beat } from '../director/outline';
 import { lowRoofCorridor, coinHeaven, allChunks } from '../chunks';
 
@@ -11,8 +14,8 @@ const GRID = 22;
 const table = buildReachableTable();
 const BASELINE = GRID - 2 - 1; // foot row at the baseline
 
-function ctx(seed = 1, theme = 'overworld'): RealizeContext {
-  return { rng: new Rng(seed), table, theme, targetGroundRow: BASELINE, gridHeight: GRID };
+function ctx(seed = 1, theme = 'overworld', difficulty?: RealizeContext['difficulty']): RealizeContext {
+  return { rng: new Rng(seed), table, theme, targetGroundRow: BASELINE, gridHeight: GRID, difficulty };
 }
 function beat(band: Beat['band'], verticality: Beat['verticality'], role: Beat['role'] = 'traversal'): Beat {
   return { index: 0, band, role, verticality, theme: 'overworld' };
@@ -82,6 +85,55 @@ describe('ChunkRealizer: fallback ladder (KTD8) — never throws', () => {
 
   it('the realizer never throws and always emits a usable segment for any emitted cell', () => {
     const r = new ChunkRealizer().realize(beat(Band.MEDIUM, 'stepped'), ctx(2));
+    expect(r.width).toBeGreaterThan(0);
+  });
+});
+
+describe('applyDifficulty: folds intensity multipliers into an effective recipe (U2)', () => {
+  const base = getThemeRecipe('Grassland'); // has goomba/koopa/bull in its mix
+
+  it('IDENTITY_PARAMS yields a value-identical recipe (the byte-identical regression guard)', () => {
+    const eff = applyDifficulty(base, IDENTITY_PARAMS);
+    expect(eff.gapBias).toBe(base.gapBias);
+    expect(eff.enemyDensity).toBe(base.enemyDensity);
+    expect(eff.enemyMix).toEqual(base.enemyMix);
+    // Key order must be preserved so pickEnemyType's Object.entries iteration is stable.
+    expect(Object.keys(eff.enemyMix)).toEqual(Object.keys(base.enemyMix));
+  });
+
+  it('scales gapBias and enemyDensity multiplicatively and adds koopaBias additively', () => {
+    const eff = applyDifficulty(base, { densityScale: 2, gapWeight: 3, koopaBias: 1.5 });
+    expect(eff.gapBias).toBeCloseTo(base.gapBias * 3, 10);
+    expect(eff.enemyDensity).toBeCloseTo(base.enemyDensity * 2, 10);
+    expect(eff.enemyMix[EnemyType.KOOPA]).toBeCloseTo((base.enemyMix[EnemyType.KOOPA] ?? 0) + 1.5, 10);
+  });
+
+  it('leaves the bull (and goomba) mix weights untouched — bull is not the threat-mix lever', () => {
+    const eff = applyDifficulty(base, { densityScale: 2, gapWeight: 3, koopaBias: 1.5 });
+    expect(eff.enemyMix[EnemyType.BULL]).toBe(base.enemyMix[EnemyType.BULL]);
+    expect(eff.enemyMix[EnemyType.GOOMBA]).toBe(base.enemyMix[EnemyType.GOOMBA]);
+  });
+
+  it('preserves the cosmetic + legality fields (only the three levers change)', () => {
+    const eff = applyDifficulty(base, { densityScale: 2, gapWeight: 3, koopaBias: 1.5 });
+    expect(eff.allowsLowCeiling).toBe(base.allowsLowCeiling);
+    expect(eff.ceilingPressure).toBe(base.ceilingPressure);
+    expect(eff.name).toBe(base.name);
+  });
+});
+
+describe('ChunkRealizer: difficulty scales intensity, not band (KTD3)', () => {
+  it('an easy beat still realizes at easy-or-easier achievedBand under high difficulty', () => {
+    const hard = difficultyParams(2); // a high scalar
+    for (let s = 0; s < 20; s++) {
+      const r = new ChunkRealizer().realize(beat(Band.EASY, 'flat'), ctx(s, 'overworld', hard));
+      expect(bandRank(r.achievedBand)).toBeLessThanOrEqual(bandRank('easy'));
+    }
+  });
+
+  it('high difficulty preserves a usable segment (never starves the realizer)', () => {
+    const hard = difficultyParams(2);
+    const r = new ChunkRealizer().realize(beat(Band.MEDIUM, 'stepped'), ctx(3, 'overworld', hard));
     expect(r.width).toBeGreaterThan(0);
   });
 });

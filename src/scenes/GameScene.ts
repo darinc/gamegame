@@ -164,9 +164,16 @@ export class GameScene extends Phaser.Scene {
       // structure agree. enemySpawns (GOOMBA/KOOPA/BULL) and questionBlockContents from the
       // director's LevelData flow through LevelLoader -> createEnemies / createTile unchanged.
       this.levelLoader.load(
-        generateDirectedLevel(directorBaseSeed, this.settings.levelNumber),
+        generateDirectedLevel(
+          directorBaseSeed,
+          this.settings.levelNumber,
+          undefined,
+          this.settings.difficulty,
+        ),
       );
-      console.log(`Loaded directed level (base seed ${directorBaseSeed})`);
+      console.log(
+        `Loaded directed level (base seed ${directorBaseSeed}, difficulty ${this.settings.difficulty})`,
+      );
     }
 
     // Per-level visual theme (sky + scenery + terrain tint).

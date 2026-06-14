@@ -33,6 +33,8 @@ import { Band, BAND_ORDER, bandRank } from '../director/bands';
 import type { Beat } from '../director/outline';
 import { getThemeRecipe } from '../themes';
 import type { Theme } from '../themes';
+import { IDENTITY_PARAMS } from '../director/difficulty';
+import type { DifficultyParams } from '../director/difficulty';
 import type { Rng } from '../rng';
 import type {
   BeatRealizer,
@@ -100,6 +102,31 @@ export type CandidateLookup = (
 const realCandidates: CandidateLookup = candidatesFor;
 
 /**
+ * Fold the absolute-difficulty multipliers (U1) into an EFFECTIVE theme recipe so the existing
+ * selection/placement consumers scale without new code paths:
+ *   - gapWeight   rides on gapBias        -> weightedPick prefers gap-bearing chunks more strongly;
+ *   - densityScale rides on enemyDensity  -> placementsFor thickens the roster;
+ *   - koopaBias   adds to the koopa mix   -> patrols lean toward the faster threat (bull is left
+ *                                            alone — it needs an authored arena; only bias koopa if
+ *                                            the theme already includes it, preserving theme identity
+ *                                            like Sky's bull-free roster).
+ * With IDENTITY_PARAMS every factor is a numeric no-op (x*1, x+0), so the effective recipe is
+ * value-identical to the base and generation stays byte-identical (R2 regression guard).
+ */
+export function applyDifficulty(recipe: Theme, params: DifficultyParams): Theme {
+  const mix = recipe.enemyMix;
+  const koopa = mix[EnemyType.KOOPA];
+  return {
+    ...recipe,
+    gapBias: recipe.gapBias * params.gapWeight,
+    enemyDensity: recipe.enemyDensity * params.densityScale,
+    enemyMix: koopa !== undefined
+      ? { ...mix, [EnemyType.KOOPA]: koopa + params.koopaBias }
+      : mix,
+  };
+}
+
+/**
  * Theme-biased weighted pick among legal candidates. Each candidate starts at weight 1 and is
  * scaled by the theme recipe so the structural archetype reads through selection (KTD14/R14):
  *   - ceilingPressure 'high' favors low-ceiling chunks (Cavern crowds the player with roofs);
@@ -141,9 +168,12 @@ export function selectChunk(
   vert: VerticalityClass,
   theme: string,
   rng: Rng,
-  lookup: CandidateLookup = realCandidates
+  lookup: CandidateLookup = realCandidates,
+  // Optional EFFECTIVE recipe (difficulty-scaled gapBias/ceilingPressure). When omitted, the theme's
+  // own recipe is used so callers/tests that don't scale behave exactly as before.
+  recipeOverride?: Theme
 ): ChunkSelection | { rung: 'filler' } {
-  const recipe = getThemeRecipe(theme);
+  const recipe = recipeOverride ?? getThemeRecipe(theme);
 
   // 1. exact cell.
   let cands = lookup(band, vert, theme);
@@ -281,8 +311,12 @@ function placementsFor(
 
 export class ChunkRealizer implements BeatRealizer {
   realize(beat: Beat, ctx: RealizeContext): RealizedSegment {
-    const recipe = getThemeRecipe(ctx.theme);
-    const sel = selectChunk(beat.band as BandName, beat.verticality, ctx.theme, ctx.rng);
+    // Scale the theme recipe by the level's absolute difficulty (identity when none supplied), then
+    // feed the SAME effective recipe to both selection (gap bias) and placement (density + mix).
+    const recipe = applyDifficulty(getThemeRecipe(ctx.theme), ctx.difficulty ?? IDENTITY_PARAMS);
+    const sel = selectChunk(
+      beat.band as BandName, beat.verticality, ctx.theme, ctx.rng, realCandidates, recipe
+    );
     if (!('chunk' in sel)) {
       return buildFiller(ctx);
     }

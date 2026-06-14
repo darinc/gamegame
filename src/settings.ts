@@ -43,6 +43,26 @@ export const DEFAULT_SETTINGS: GameSettings = {
   playerStates: [],
 };
 
+// Player-facing difficulty tiers offered on the title menu. The chosen value is written to
+// GameSettings.difficulty — the shared generator baseline — and threaded to the director, which maps
+// (levelNumber, difficulty) to the absolute difficulty scalar (see levels/director/difficulty.ts).
+// Normal === DEFAULT_SETTINGS.difficulty, so the out-of-the-box feel is unchanged. The values stay
+// inside parseSettingsFromURL's 1-10 clamp so ?difficulty= still works for finer control.
+export interface DifficultyTier {
+  label: string;
+  value: number;
+  hint: string;
+}
+
+export const DIFFICULTY_TIERS: DifficultyTier[] = [
+  { label: 'Easy', value: 1, hint: 'A gentler ramp — great for younger players.' },
+  { label: 'Normal', value: 2, hint: 'The default co-op ramp.' },
+  { label: 'Hard', value: 4, hint: 'Ramps up sooner and stays busier.' },
+];
+
+// Index into DIFFICULTY_TIERS of the default (Normal) selection on the menu — an index, not a value.
+export const DEFAULT_DIFFICULTY_INDEX = 1;
+
 // Presets the title screen offers. Each only overrides player/bot config.
 export const MODE_PRESETS: Record<string, Partial<GameSettings>> = {
   coop:    { playerCount: 2, botMask: [false, false] }, // two humans
