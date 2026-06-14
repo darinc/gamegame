@@ -4,6 +4,11 @@ import { TileType } from './types';
 import { Brick } from '../entities/Brick';
 import { QuestionBlock } from '../entities/QuestionBlock';
 
+// Legacy fallback only: levels generated without a questionBlockContents sidecar
+// (hybrid/procedural/named) keep their original ~35% power-up behavior. The director path
+// always supplies the sidecar, so its blocks are seed-deterministic (KTD4).
+const LEGACY_POWERUP_CHANCE = 0.35;
+
 export class LevelLoader {
   private scene: Phaser.Scene;
   private groundGroup!: Phaser.Physics.Arcade.StaticGroup;
@@ -12,6 +17,7 @@ export class LevelLoader {
   private bricks: Brick[] = [];
   private questionBlocks: QuestionBlock[] = [];
   private levelData: LevelData | null = null;
+  private questionContent: Map<string, boolean> = new Map();
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -19,6 +25,12 @@ export class LevelLoader {
 
   load(levelData: LevelData): void {
     this.levelData = levelData;
+
+    // Index generation-time question-block contents by grid coords (KTD4).
+    this.questionContent = new Map();
+    for (const c of levelData.questionBlockContents ?? []) {
+      this.questionContent.set(`${c.x},${c.y}`, c.containsPowerUp);
+    }
 
     // Create physics groups
     this.groundGroup = this.scene.physics.add.staticGroup();
@@ -54,7 +66,11 @@ export class LevelLoader {
 
     // Handle question blocks specially
     if (tileType === TileType.QUESTION) {
-      const questionBlock = new QuestionBlock(this.scene, pixelX, pixelY);
+      const key = `${gridX},${gridY}`;
+      const containsPowerUp = this.questionContent.has(key)
+        ? this.questionContent.get(key)!
+        : Math.random() < LEGACY_POWERUP_CHANCE; // legacy levels without a sidecar
+      const questionBlock = new QuestionBlock(this.scene, pixelX, pixelY, containsPowerUp);
       this.questionBlocks.push(questionBlock);
       return;
     }

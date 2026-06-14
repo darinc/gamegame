@@ -166,6 +166,50 @@ const CRITTER_2 = [
 CRIT.b = 0x5a3318;
 CRIT.B = 0x49301c;
 
+// Koopa (reskinned patrol enemy, KTD15) — a green shelled critter, visually distinct from the
+// brown goomba. Same 16x16 frame + 2-frame walk so it drops into the Enemy class with no body
+// changes. G = shell green, g = shell shade, Y = belly, S = shell-rim highlight, b/B = feet.
+const KOOP: Palette = {
+  '.': null, K: 0x161325, G: 0x4caf50, g: 0x357a38, Y: 0xfff0c2, E: 0xffffff, P: 0x2a2740,
+  S: 0x9ee493, b: 0xf2c14e, B: 0xcf9a2f,
+};
+const KOOPA_1 = [
+  '................',
+  '......KKKK......',
+  '....KKYYYYKK....',
+  '...KYYEEEEYYK...',
+  '...KYEPEEPEYK...',
+  '...KYYYYYYYYK...',
+  '..KKGGGGGGGGKK..',
+  '.KGSSGGGGGGSSGK.',
+  '.KGGgGGGGggGGGK.',
+  '.KGGGggGGggGGGK.',
+  '.KGGgGGGGggGGGK.',
+  '..KGGGGGGGGGGK..',
+  '...KKGGGGGGKK...',
+  '...KbbK..KbbK...',
+  '...KBB....BBK...',
+  '................',
+];
+const KOOPA_2 = [
+  '................',
+  '......KKKK......',
+  '....KKYYYYKK....',
+  '...KYYEEEEYYK...',
+  '...KYEPEEPEYK...',
+  '...KYYYYYYYYK...',
+  '..KKGGGGGGGGKK..',
+  '.KGSSGGGGGGSSGK.',
+  '.KGGgGGGGggGGGK.',
+  '.KGGGggGGggGGGK.',
+  '.KGGgGGGGggGGGK.',
+  '..KGGGGGGGGGGK..',
+  '...KKGGGGGGKK...',
+  '..KbbK....KbbK..',
+  '..KBB........BBK',
+  '................',
+];
+
 const MUSH: Palette = {
   '.': null, K: 0x161325, R: 0xff5a4d, r: 0xc6261d, W: 0xffffff, S: 0xfff1d6, s: 0xe6c89b, P: 0x2a2740,
 };
@@ -248,6 +292,11 @@ export class BootScene extends Phaser.Scene {
     this.drawPixels('goomba', CRITTER_1, CRIT);
     this.drawPixels('goomba_walk1', CRITTER_1, CRIT);
     this.drawPixels('goomba_walk2', CRITTER_2, CRIT);
+
+    // Koopa — reskinned patrol enemy (KTD15), green shell, no shell-kick behavior.
+    this.drawPixels('koopa', KOOPA_1, KOOP);
+    this.drawPixels('koopa_walk1', KOOPA_1, KOOP);
+    this.drawPixels('koopa_walk2', KOOPA_2, KOOP);
 
     // Charging Bull — stocky, horned, drawn with graphics primitives (it's wide).
     const g = this.make.graphics({ x: 0, y: 0 });
@@ -485,6 +534,7 @@ export class BootScene extends Phaser.Scene {
     }
 
     def('goomba-walk', ['goomba_walk1', 'goomba_walk2'], 6, -1);
+    def('koopa-walk', ['koopa_walk1', 'koopa_walk2'], 6, -1);
     def('coin-spin', ['coin', 'coin1', 'coin2', 'coin3'], 10, -1);
   }
 }

@@ -11,6 +11,7 @@ import { LevelLoader } from '../levels/LevelLoader';
 import { getLevel } from '../levels/index';
 import { generateLevel } from '../levels/ProceduralGenerator';
 import { generateHybridLevel } from '../levels/HybridGenerator';
+import { generateDirectedLevel } from '../levels/director/Director';
 import { EnemyType } from '../levels/types';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config';
 import { BotController } from '../systems/BotController';
@@ -117,28 +118,55 @@ export class GameScene extends Phaser.Scene {
     // Seed (if any) still comes from the URL for reproducible levels.
     const urlParams = new URLSearchParams(window.location.search);
     const seedParam = urlParams.get('seed');
-    // Vary the seed by level number so an endless run keeps producing fresh levels
-    // even when a fixed seed is supplied.
-    const seed = seedParam !== null
+
+    // Legacy generators (hybrid/procedural) use the old per-level seed hack: a fixed URL seed
+    // offset by levelNumber*1000 so an endless run keeps changing. This poor low-bit mixing is
+    // the reason the director mixes the seed itself (rngForLevel) instead.
+    const legacySeed = seedParam !== null
       ? parseInt(seedParam, 10) + this.settings.levelNumber * 1000
       : undefined;
+
+    // The director takes a BASE seed + raw levelNumber and mixes them internally (rngForLevel),
+    // so it must NOT be pre-offset by levelNumber. A fixed ?seed reproduces the whole run; with
+    // no ?seed we pick a random session base seed ONCE and persist it on settings so it survives
+    // the GameScene -> LevelComplete -> GameScene round-trip (the settings object is carried
+    // forward). This random selection lives on the Phaser side, OUTSIDE the pure director call,
+    // so it does not violate the determinism guard (KTD3).
+    let directorBaseSeed: number;
+    if (seedParam !== null) {
+      directorBaseSeed = parseInt(seedParam, 10);
+    } else if (typeof this.settings.seed === 'number') {
+      directorBaseSeed = this.settings.seed;
+    } else {
+      directorBaseSeed = Math.floor(Math.random() * 1e9);
+      this.settings.seed = directorBaseSeed;
+    }
 
     // Initialize level loader and load level
     this.levelLoader = new LevelLoader(this);
 
     if (this.settings.genMode === 'procedural') {
-      this.levelLoader.load(generateLevel(seed, { difficulty: this.settings.difficulty }));
+      this.levelLoader.load(generateLevel(legacySeed, { difficulty: this.settings.difficulty }));
       console.log('Loaded procedural level');
     } else if (this.settings.genMode === 'named') {
       const level = getLevel(this.settings.levelName || 'level1');
       this.levelLoader.load(level);
       console.log(`Loaded level: ${level.name}`);
-    } else {
-      // Default: hybrid generation (hand-crafted moments + procedural bridges)
+    } else if (this.settings.genMode === 'hybrid') {
+      // Legacy parity route (?hybrid=true): hand-crafted moments + procedural bridges.
       this.levelLoader.load(
-        generateHybridLevel(seed, { difficulty: this.settings.difficulty }),
+        generateHybridLevel(legacySeed, { difficulty: this.settings.difficulty }),
       );
       console.log('Loaded hybrid level');
+    } else {
+      // Default: outline-first director. It applies themeForLevel(levelNumber) internally for
+      // structure; the cosmetic theme picked below uses the SAME themeForLevel so visuals and
+      // structure agree. enemySpawns (GOOMBA/KOOPA/BULL) and questionBlockContents from the
+      // director's LevelData flow through LevelLoader -> createEnemies / createTile unchanged.
+      this.levelLoader.load(
+        generateDirectedLevel(directorBaseSeed, this.settings.levelNumber),
+      );
+      console.log(`Loaded directed level (base seed ${directorBaseSeed})`);
     }
 
     // Per-level visual theme (sky + scenery + terrain tint).
@@ -328,8 +356,11 @@ export class GameScene extends Phaser.Scene {
         this.physics.add.collider(bull, groundGroup);
         this.physics.add.collider(bull, platformGroup);
       } else {
-        // Create regular goomba enemy
-        const enemy = new Enemy(this, pos.x, pos.y);
+        // Patrol enemy: dispatch on type so KOOPA renders/behaves as its own variant instead of
+        // falling through to the goomba sprite. KOOPA is a reskinned patrol enemy (KTD15) — same
+        // wiring as a goomba, only a distinct texture + slightly faster patrol speed.
+        const variant = spawn.type === EnemyType.KOOPA ? 'koopa' : 'goomba';
+        const enemy = new Enemy(this, pos.x, pos.y, variant);
         this.enemies.push(enemy);
 
         // Give enemy reference to ground for ledge detection
@@ -519,6 +550,10 @@ export class GameScene extends Phaser.Scene {
 
     // Bulls collide with question blocks (but break bricks while charging - handled in ChargingBull)
     this.bulls.forEach((bull) => {
+      // setupBricks runs after createEnemies and REASSIGNS this.bricks to a fresh array, so the
+      // empty array passed at spawn time is stale. Re-hand the live bricks here so charging bulls
+      // (level1 AND generator-placed) can actually break bricks.
+      bull.setBricks(this.bricks);
       this.questionBlocks.forEach((qBlock) => {
         this.physics.add.collider(bull, qBlock);
       });

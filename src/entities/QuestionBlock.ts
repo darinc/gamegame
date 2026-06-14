@@ -1,7 +1,5 @@
 import Phaser from 'phaser';
 
-const POWERUP_CHANCE = 0.35; // chance to contain a power-up (rest are coins)
-
 export interface BlockActivationResult {
   x: number;
   y: number;
@@ -12,7 +10,9 @@ export class QuestionBlock extends Phaser.Physics.Arcade.Sprite {
   private activated: boolean = false;
   private containsPowerUp: boolean = false;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  // Contents are decided at generation time and passed in (KTD4), not rolled here — so the
+  // same seed yields the same blocks and reachability reasoning can depend on power-ups.
+  constructor(scene: Phaser.Scene, x: number, y: number, containsPowerUp: boolean = false) {
     super(scene, x, y, 'question');
 
     scene.add.existing(this);
@@ -21,8 +21,7 @@ export class QuestionBlock extends Phaser.Physics.Arcade.Sprite {
     this.setOrigin(0.5, 0.5);
     this.setDepth(2);
 
-    // Randomly determine if this block contains a power-up
-    this.containsPowerUp = Math.random() < POWERUP_CHANCE;
+    this.containsPowerUp = containsPowerUp;
   }
 
   activate(fromAbove: boolean = false): BlockActivationResult | null {

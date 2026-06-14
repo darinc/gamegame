@@ -1,29 +1,29 @@
 import Phaser from 'phaser';
 import type { PlayerInput } from '../systems/InputManager';
 import { audio } from '../systems/AudioSynth';
+// Movement/jump physics live in the shared, Phaser-free module so the reachability table
+// and the live game integrate from one source of truth (KTD5).
+import {
+  WALK_SPEED,
+  RUN_SPEED,
+  ACCELERATION,
+  DECELERATION,
+  AIR_ACCELERATION,
+  AIR_DECELERATION,
+  JUMP_VELOCITY,
+  JUMP_HOLD_FORCE,
+  MAX_JUMP_HOLD_TIME,
+  COYOTE_TIME,
+  JUMP_BUFFER_TIME,
+  GROUND_POUND_VELOCITY,
+  GROUND_POUND_STALL_TIME,
+} from '../physics';
 
-// Physics constants for Mario-like feel
-const WALK_SPEED = 200;
-const RUN_SPEED = 350;
-const ACCELERATION = 1200;
-const DECELERATION = 1500;
-const AIR_ACCELERATION = 600;
-const AIR_DECELERATION = 400;
-
+// Player-only constants (not part of the reachability envelope).
 // Duck / slide
 const SLIDE_SPEED_THRESHOLD = 150; // above this, ducking coasts into a slide
 const SLIDE_DECEL = 340;           // gentle friction while sliding
 const DUCK_STOP_DECEL = 1700;      // quick stop when ducking from a slow walk
-
-const JUMP_VELOCITY = -420; // Balanced for ~4 tile jump height
-const JUMP_HOLD_FORCE = -25; // Hold for extra height
-const MAX_JUMP_HOLD_TIME = 250; // ms
-const COYOTE_TIME = 80; // ms - can still jump after leaving ground
-const JUMP_BUFFER_TIME = 100; // ms - remember jump press before landing
-
-// Ground pound settings
-const GROUND_POUND_VELOCITY = 800; // Fast downward velocity
-const GROUND_POUND_STALL_TIME = 150; // ms of hovering before pound
 
 // Bubble seek settings
 const BUBBLE_SEEK_SPEED_MIN = 200;

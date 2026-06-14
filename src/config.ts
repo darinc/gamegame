@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GRAVITY } from './physics';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { GameScene } from './scenes/GameScene';
@@ -18,7 +19,7 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   physics: {
     default: 'arcade',
     arcade: {
-      gravity: { x: 0, y: 1200 },
+      gravity: { x: 0, y: GRAVITY },
       debug: false, // Debug off for cleaner look
     },
   },

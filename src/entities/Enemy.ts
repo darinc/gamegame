@@ -1,7 +1,17 @@
 import Phaser from 'phaser';
 
-const GOOMBA_SPEED = 60;
 const LEDGE_CHECK_DISTANCE = 20; // How far ahead to check for ground
+
+// Patrol variants. Koopa is a RESKINNED patrol enemy (KTD15) — distinct texture + a slightly
+// faster patrol so it reads as its own threat — NOT a shell-kick enemy (that is deferred).
+export type EnemyVariant = 'goomba' | 'koopa';
+
+// Per-variant patrol speed (px/s). Keeping this a plain map (not branching constants) makes the
+// behavioral distinction a single source of truth that a unit test can assert in Node.
+export const VARIANT_SPEED: Record<EnemyVariant, number> = {
+  goomba: 60,
+  koopa: 75,
+};
 
 export const EnemyState = {
   WALKING: 'walking',
@@ -17,9 +27,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private stompedTime: number = 0;
   private readonly STOMPED_DURATION = 500; // ms before disappearing
   private groundGroup: Phaser.Physics.Arcade.StaticGroup | null = null;
+  private readonly speed: number;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'goomba');
+  constructor(scene: Phaser.Scene, x: number, y: number, variant: EnemyVariant = 'goomba') {
+    super(scene, x, y, variant);
+
+    this.speed = VARIANT_SPEED[variant];
 
     scene.add.existing(this);
     scene.physics.add.existing(this);
@@ -30,11 +43,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     body.setOffset(2, 4);
 
     // Start moving
-    body.setVelocityX(GOOMBA_SPEED * this.walkDirection);
+    body.setVelocityX(this.speed * this.walkDirection);
 
     this.setDepth(5);
 
-    if (scene.anims.exists('goomba-walk')) this.play('goomba-walk');
+    const walkAnim = `${variant}-walk`;
+    if (scene.anims.exists(walkAnim)) this.play(walkAnim);
   }
 
   setGroundGroup(group: Phaser.Physics.Arcade.StaticGroup): void {
@@ -86,7 +100,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     this.walkDirection = newDirection;
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setVelocityX(GOOMBA_SPEED * this.walkDirection);
+    body.setVelocityX(this.speed * this.walkDirection);
     this.setFlipX(this.walkDirection > 0);
   }
 
