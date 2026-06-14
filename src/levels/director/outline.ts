@@ -17,12 +17,15 @@ import type { Band as BandT } from './bands';
 import { CURVE_ARCHETYPES, GENTLE_OPENER, bandSequenceFor } from './curves';
 import type { CurveArchetype } from './curves';
 import type { Rng } from '../rng';
+import type { VerticalityClass } from '../types';
 
 // --- Public types ---------------------------------------------------------------------------
 
 export type Role = 'traversal' | 'combat' | 'reward' | 'setpiece';
 
-export type VerticalityClass = 'flat' | 'stepped' | 'high';
+// VerticalityClass's string-union type lives in src/levels/types.ts (so the chunk pool can
+// annotate against it without an import cycle); re-exported here as the director's canonical name.
+export type { VerticalityClass } from '../types';
 
 export interface Beat {
   index: number;

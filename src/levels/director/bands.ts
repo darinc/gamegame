@@ -10,15 +10,20 @@
 // actually lands in. It is consumed later by U6/U10 to check that a realized segment matches
 // the band the outline asked for (the arc-legibility check) — it never drives selection.
 
+import type { BandName } from '../types';
+
 // Band is a string union expressed via a `const` object, matching the TileType / EnemyType
 // pattern in src/levels/types.ts (NOT a TS enum — tsconfig forbids erasable-only violations).
+// The string-union TYPE itself lives in src/levels/types.ts (`BandName`) so the chunk pool can
+// annotate against it without importing the director (avoids a chunks <-> director cycle); the
+// runtime `Band` const object below pairs with it and its values MUST equal BandName's members.
 export const Band = {
   EASY: 'easy',
   MEDIUM: 'medium',
   PEAK: 'peak',
 } as const;
 
-export type Band = typeof Band[keyof typeof Band];
+export type Band = BandName;
 
 // Ordered easiest -> hardest. Used to compare/clamp bands and to scale curves.
 export const BAND_ORDER: readonly Band[] = [Band.EASY, Band.MEDIUM, Band.PEAK];
