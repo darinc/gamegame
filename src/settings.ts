@@ -4,7 +4,7 @@
 // scene data. Defaults are tuned for the core use case: two people who love the
 // *easy* Mario levels, playing together, with as little setup as possible.
 
-export type GenMode = 'hybrid' | 'procedural' | 'named';
+export type GenMode = 'director' | 'hybrid' | 'procedural' | 'named';
 
 export interface PlayerState {
   health: number;
@@ -31,7 +31,9 @@ export interface GameSettings {
 export const DEFAULT_SETTINGS: GameSettings = {
   playerCount: 2,
   botMask: [false, false],
-  genMode: 'hybrid',
+  // The outline-first director is the default generator. The legacy generators stay reachable
+  // only behind explicit URL flags (?hybrid=true / ?procedural=true / ?level=) for parity work.
+  genMode: 'director',
   difficulty: 2,
   levelNumber: 1,
   lives: 5,
