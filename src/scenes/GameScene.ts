@@ -328,8 +328,11 @@ export class GameScene extends Phaser.Scene {
         this.physics.add.collider(bull, groundGroup);
         this.physics.add.collider(bull, platformGroup);
       } else {
-        // Create regular goomba enemy
-        const enemy = new Enemy(this, pos.x, pos.y);
+        // Patrol enemy: dispatch on type so KOOPA renders/behaves as its own variant instead of
+        // falling through to the goomba sprite. KOOPA is a reskinned patrol enemy (KTD15) — same
+        // wiring as a goomba, only a distinct texture + slightly faster patrol speed.
+        const variant = spawn.type === EnemyType.KOOPA ? 'koopa' : 'goomba';
+        const enemy = new Enemy(this, pos.x, pos.y, variant);
         this.enemies.push(enemy);
 
         // Give enemy reference to ground for ledge detection
@@ -519,6 +522,10 @@ export class GameScene extends Phaser.Scene {
 
     // Bulls collide with question blocks (but break bricks while charging - handled in ChargingBull)
     this.bulls.forEach((bull) => {
+      // setupBricks runs after createEnemies and REASSIGNS this.bricks to a fresh array, so the
+      // empty array passed at spawn time is stale. Re-hand the live bricks here so charging bulls
+      // (level1 AND generator-placed) can actually break bricks.
+      bull.setBricks(this.bricks);
       this.questionBlocks.forEach((qBlock) => {
         this.physics.add.collider(bull, qBlock);
       });
