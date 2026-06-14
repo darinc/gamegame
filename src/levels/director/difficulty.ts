@@ -68,7 +68,12 @@ function clamp(v: number, lo: number, hi: number): number {
 /**
  * The absolute difficulty scalar for a level (R1/R2/R4). Pure + deterministic in (levelNumber,
  * difficulty). Returns d >= 0, unbounded above (endless creep). Level 1 is always 0 (the gentle
- * opener floor, KTD6) regardless of tier.
+ * opener floor, KTD6) regardless of tier — so level 1 realizes IDENTICALLY across Easy/Normal/Hard.
+ *
+ * Note the floor zeros the SCALAR, not the density BASELINE: difficultyParams(0) still has
+ * densityScale = DENSITY_BASE (>1), so a menu-selected level 1 is slightly denser than the no-arg
+ * legacy path (which uses IDENTITY_PARAMS). That is the deliberate R3 "raise the baseline" — level 1
+ * stays gentle and tier-invariant, just not byte-identical to the difficulty-unaware call.
  */
 export function difficultyScalar(levelNumber: number, difficulty: number): number {
   if (levelNumber <= 1) return 0;

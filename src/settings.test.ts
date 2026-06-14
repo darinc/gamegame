@@ -3,13 +3,13 @@ import {
   buildSettings,
   DEFAULT_SETTINGS,
   DIFFICULTY_TIERS,
-  DEFAULT_DIFFICULTY_TIER,
+  DEFAULT_DIFFICULTY_INDEX,
   MODE_PRESETS,
 } from './settings';
 
 describe('difficulty tiers (U3, R5/R6)', () => {
   it('the default tier is Normal and equals the out-of-the-box difficulty', () => {
-    const normal = DIFFICULTY_TIERS[DEFAULT_DIFFICULTY_TIER];
+    const normal = DIFFICULTY_TIERS[DEFAULT_DIFFICULTY_INDEX];
     expect(normal.label).toBe('Normal');
     expect(normal.value).toBe(DEFAULT_SETTINGS.difficulty);
   });

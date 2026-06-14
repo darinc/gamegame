@@ -113,7 +113,7 @@ const realCandidates: CandidateLookup = candidatesFor;
  * With IDENTITY_PARAMS every factor is a numeric no-op (x*1, x+0), so the effective recipe is
  * value-identical to the base and generation stays byte-identical (R2 regression guard).
  */
-function applyDifficulty(recipe: Theme, params: DifficultyParams): Theme {
+export function applyDifficulty(recipe: Theme, params: DifficultyParams): Theme {
   const mix = recipe.enemyMix;
   const koopa = mix[EnemyType.KOOPA];
   return {

@@ -6,7 +6,7 @@ import {
   shouldAutostart,
   MODE_PRESETS,
   DIFFICULTY_TIERS,
-  DEFAULT_DIFFICULTY_TIER,
+  DEFAULT_DIFFICULTY_INDEX,
 } from '../settings';
 import { audio } from '../systems/AudioSynth';
 
@@ -25,7 +25,7 @@ const OPTIONS: MenuOption[] = [
 
 export class TitleScene extends Phaser.Scene {
   private selected = 0;
-  private difficultyIndex = DEFAULT_DIFFICULTY_TIER;
+  private difficultyIndex = DEFAULT_DIFFICULTY_INDEX;
   private optionTexts: Phaser.GameObjects.Text[] = [];
   private hintText!: Phaser.GameObjects.Text;
   private difficultyText!: Phaser.GameObjects.Text;
@@ -45,7 +45,7 @@ export class TitleScene extends Phaser.Scene {
     }
 
     this.selected = 0;
-    this.difficultyIndex = DEFAULT_DIFFICULTY_TIER;
+    this.difficultyIndex = DEFAULT_DIFFICULTY_INDEX;
     this.optionTexts = [];
 
     this.drawBackdrop();

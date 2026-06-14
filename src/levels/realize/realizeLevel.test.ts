@@ -196,6 +196,19 @@ describe('generateDirectedLevel: difficulty scaling (R2/R3/R7)', () => {
     expect(hard.pitCols).toBeGreaterThan(base.pitCols);
   });
 
+  it('level 1 is byte-identical across tiers — the gentle opener is floored (R4/KTD6, end-to-end)', () => {
+    // difficultyScalar(1, *) === 0 at every tier, so level 1 must realize identically on Easy,
+    // Normal, and Hard — proving the gentle opener survives any menu floor at the realized-output
+    // level, not just in the scalar unit test.
+    for (let seed = 1; seed <= 10; seed++) {
+      const normal = generateDirectedLevel(seed, 1, undefined, NORMAL);
+      const hard = generateDirectedLevel(seed, 1, undefined, HARD);
+      const easy = generateDirectedLevel(seed, 1, undefined, 1);
+      expect(hard).toEqual(normal);
+      expect(easy).toEqual(normal);
+    }
+  });
+
   it('keeps hard levels solvable from both spawns (no collapse, R8 smoke check)', () => {
     for (let seed = 1; seed <= 12; seed++) {
       const lvl = generateDirectedLevel(seed, 15, undefined, HARD);

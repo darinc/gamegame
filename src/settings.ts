@@ -60,8 +60,8 @@ export const DIFFICULTY_TIERS: DifficultyTier[] = [
   { label: 'Hard', value: 4, hint: 'Ramps up sooner and stays busier.' },
 ];
 
-// Index of the Normal tier — the default selection on the menu.
-export const DEFAULT_DIFFICULTY_TIER = 1;
+// Index into DIFFICULTY_TIERS of the default (Normal) selection on the menu — an index, not a value.
+export const DEFAULT_DIFFICULTY_INDEX = 1;
 
 // Presets the title screen offers. Each only overrides player/bot config.
 export const MODE_PRESETS: Record<string, Partial<GameSettings>> = {
