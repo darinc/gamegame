@@ -3,7 +3,8 @@ import { ChunkRealizer, selectChunk, isChunkThemeLegal } from './ChunkRealizer';
 import type { RealizeContext } from './BeatRealizer';
 import { Rng } from '../rng';
 import { buildReachableTable } from '../reachability/reachableTable';
-import { Band } from '../director/bands';
+import { Band, bandRank } from '../director/bands';
+import { difficultyParams } from '../director/difficulty';
 import type { Beat } from '../director/outline';
 import { lowRoofCorridor, coinHeaven, allChunks } from '../chunks';
 
@@ -11,8 +12,8 @@ const GRID = 22;
 const table = buildReachableTable();
 const BASELINE = GRID - 2 - 1; // foot row at the baseline
 
-function ctx(seed = 1, theme = 'overworld'): RealizeContext {
-  return { rng: new Rng(seed), table, theme, targetGroundRow: BASELINE, gridHeight: GRID };
+function ctx(seed = 1, theme = 'overworld', difficulty?: RealizeContext['difficulty']): RealizeContext {
+  return { rng: new Rng(seed), table, theme, targetGroundRow: BASELINE, gridHeight: GRID, difficulty };
 }
 function beat(band: Beat['band'], verticality: Beat['verticality'], role: Beat['role'] = 'traversal'): Beat {
   return { index: 0, band, role, verticality, theme: 'overworld' };
@@ -82,6 +83,22 @@ describe('ChunkRealizer: fallback ladder (KTD8) — never throws', () => {
 
   it('the realizer never throws and always emits a usable segment for any emitted cell', () => {
     const r = new ChunkRealizer().realize(beat(Band.MEDIUM, 'stepped'), ctx(2));
+    expect(r.width).toBeGreaterThan(0);
+  });
+});
+
+describe('ChunkRealizer: difficulty scales intensity, not band (KTD3)', () => {
+  it('an easy beat still realizes at easy-or-easier achievedBand under high difficulty', () => {
+    const hard = difficultyParams(2); // a high scalar
+    for (let s = 0; s < 20; s++) {
+      const r = new ChunkRealizer().realize(beat(Band.EASY, 'flat'), ctx(s, 'overworld', hard));
+      expect(bandRank(r.achievedBand)).toBeLessThanOrEqual(bandRank('easy'));
+    }
+  });
+
+  it('high difficulty preserves a usable segment (never starves the realizer)', () => {
+    const hard = difficultyParams(2);
+    const r = new ChunkRealizer().realize(beat(Band.MEDIUM, 'stepped'), ctx(3, 'overworld', hard));
     expect(r.width).toBeGreaterThan(0);
   });
 });

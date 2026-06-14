@@ -18,6 +18,8 @@ import { rngForLevel, Rng } from '../rng';
 import { themeForLevel } from '../themes';
 import { deriveOutline } from '../director/outline';
 import type { Outline } from '../director/outline';
+import { difficultyParamsFor } from '../director/difficulty';
+import type { DifficultyParams } from '../director/difficulty';
 import { buildReachableTable } from '../reachability/reachableTable';
 import type { ReachableTable } from '../reachability/reachableTable';
 import { validate } from '../reachability/validator';
@@ -55,7 +57,9 @@ function flatBlock(width: number, footRow: number): Block {
   return { tiles, width };
 }
 
-function realizeBeats(outline: Outline, rng: Rng, table: ReachableTable): RealizedSegment[] {
+function realizeBeats(
+  outline: Outline, rng: Rng, table: ReachableTable, diff: DifficultyParams
+): RealizedSegment[] {
   const realizer = new ChunkRealizer();
   return outline.beats.map((beat) => {
     const ctx = {
@@ -64,6 +68,7 @@ function realizeBeats(outline: Outline, rng: Rng, table: ReachableTable): Realiz
       theme: outline.theme,
       targetGroundRow: BASELINE_GROUND_ROW,
       gridHeight: GRID_HEIGHT,
+      difficulty: diff,
     };
     return realizer.realize(beat, ctx);
   });
@@ -109,8 +114,10 @@ function connectorBudget(outline: Outline, segWidths: number[]): number {
 }
 
 /** One realization attempt (no validation): build the blocks + assemble + resolve placements. */
-function buildAttempt(outline: Outline, rng: Rng, table: ReachableTable): LevelData {
-  const segments = realizeBeats(outline, rng, table);
+function buildAttempt(
+  outline: Outline, rng: Rng, table: ReachableTable, diff: DifficultyParams
+): LevelData {
+  const segments = realizeBeats(outline, rng, table, diff);
   const perConnector = connectorBudget(outline, segments.map((s) => s.width));
 
   const blocks: Block[] = [];
@@ -215,7 +222,9 @@ function getTable(): ReachableTable {
  * level that passes `validate(level, { table }).ok === true` (the bare spine is the terminal
  * guarantee).
  */
-export function generateDirectedLevel(seed: number, levelNumber: number, theme?: string): LevelData {
+export function generateDirectedLevel(
+  seed: number, levelNumber: number, theme?: string, difficulty?: number
+): LevelData {
   const table = getTable();
   // Outline derivation uses the BASE-seed Rng so the stateless previous-level exclusion matches
   // (see Director.ts / outline.ts). The realization substreams fork off the per-level Rng.
@@ -225,12 +234,17 @@ export function generateDirectedLevel(seed: number, levelNumber: number, theme?:
   const themeName = theme ?? themeForLevel(levelNumber).name;
   const outline = deriveOutline(base, levelNumber, themeName);
 
+  // Absolute difficulty multipliers (U1). When `difficulty` is omitted the scalar layer returns
+  // identity multipliers, so the legacy/no-difficulty call path is byte-identical to before (R2).
+  // `difficulty` is constant across a run, so generation stays deterministic per (seed, level, diff).
+  const diff = difficultyParamsFor(levelNumber, difficulty);
+
   const levelRng = rngForLevel(seed, levelNumber);
 
   for (let attempt = 0; attempt <= MAX_REROLLS; attempt++) {
     // Each attempt forks a distinct substream keyed by the attempt counter (deterministic reroll).
     const attemptRng = levelRng.fork(`attempt:${attempt}`);
-    const level = buildAttempt(outline, attemptRng, table);
+    const level = buildAttempt(outline, attemptRng, table, diff);
     if (validate(level, { table }).ok) return level;
   }
 

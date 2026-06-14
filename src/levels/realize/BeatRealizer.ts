@@ -20,6 +20,7 @@
 import type { Rng } from '../rng';
 import type { ReachableTable } from '../reachability/reachableTable';
 import type { Beat } from '../director/outline';
+import type { DifficultyParams } from '../director/difficulty';
 import type { EnemyType, RewardKind, BandName } from '../types';
 
 // --- Semantic placement requests ------------------------------------------------------------
@@ -89,6 +90,10 @@ export interface RealizeContext {
   // Total grid height the segment is stamped into (so a chunk shorter than the level bottom-aligns
   // into a full-height stamp and edge rows are expressed in grid coordinates).
   gridHeight: number;
+  // Absolute-difficulty intensity multipliers (U1, difficulty.ts) applied to the theme recipe before
+  // selection/placement. Optional: when absent the realizer uses identity (no-op) multipliers, so a
+  // context built without difficulty (legacy callers + existing tests) realizes exactly as before.
+  difficulty?: DifficultyParams;
 }
 
 export interface BeatRealizer {

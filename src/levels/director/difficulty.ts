@@ -45,19 +45,21 @@ const DENSITY_MAX = 3.0;
 // top of the theme's own gapBias in weightedPick.
 const GAP_SLOPE = 2.0;
 const GAP_MAX = 4.0;
-// Additive weight pushed onto the BULL entry of the theme enemy-mix as d rises (shifts the roster
-// toward the real threat). At d = 0 it is 0 (theme mix unchanged).
-const BULL_SLOPE = 1.6;
+// Additive weight pushed onto the KOOPA entry of the theme enemy-mix as d rises, shifting patrols
+// toward the faster threat. NOT bull: a bull needs an authored charge-lane arena, so re-rolling a
+// patrol spawn to bull just gets dropped by placement validity (placement.ts). Koopa is the sound
+// within-the-patrol-roster threat lever. At d = 0 it is 0 (theme mix unchanged).
+const KOOPA_SLOPE = 1.6;
 
 export interface DifficultyParams {
   densityScale: number; // multiply effective enemyDensity by this
   gapWeight: number;    // multiply gap-bearing chunk weight by this (on top of theme gapBias)
-  bullBias: number;     // add this to the bull weight in the enemy-mix before picking
+  koopaBias: number;    // add this to the koopa weight in the enemy-mix before picking
 }
 
 // The no-op params used when no difficulty is supplied (legacy callers + the existing sweep/tests):
 // generation stays byte-identical to the pre-ramp generator (R2 regression guard).
-export const IDENTITY_PARAMS: DifficultyParams = { densityScale: 1, gapWeight: 1, bullBias: 0 };
+export const IDENTITY_PARAMS: DifficultyParams = { densityScale: 1, gapWeight: 1, koopaBias: 0 };
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
@@ -82,7 +84,7 @@ export function difficultyParams(d: number): DifficultyParams {
   return {
     densityScale: clamp(DENSITY_BASE + d * DENSITY_SLOPE, DENSITY_BASE, DENSITY_MAX),
     gapWeight: clamp(1 + d * GAP_SLOPE, 1, GAP_MAX),
-    bullBias: Math.max(0, d * BULL_SLOPE),
+    koopaBias: Math.max(0, d * KOOPA_SLOPE),
   };
 }
 

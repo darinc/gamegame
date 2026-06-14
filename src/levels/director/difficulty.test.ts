@@ -53,13 +53,13 @@ describe('difficultyScalar (R1/R2/R4)', () => {
 
 describe('difficultyParams (R3/R7)', () => {
   it('each multiplier is monotonically non-decreasing in d', () => {
-    let prev = { densityScale: -1, gapWeight: -1, bullBias: -1 };
+    let prev = { densityScale: -1, gapWeight: -1, koopaBias: -1 };
     for (let i = 0; i <= 30; i++) {
       const d = i / 10;
       const p = difficultyParams(d);
       expect(p.densityScale).toBeGreaterThanOrEqual(prev.densityScale);
       expect(p.gapWeight).toBeGreaterThanOrEqual(prev.gapWeight);
-      expect(p.bullBias).toBeGreaterThanOrEqual(prev.bullBias);
+      expect(p.koopaBias).toBeGreaterThanOrEqual(prev.koopaBias);
       prev = p;
     }
   });
@@ -68,7 +68,7 @@ describe('difficultyParams (R3/R7)', () => {
     const p = difficultyParams(0);
     expect(p.densityScale).toBeGreaterThan(1);
     expect(p.gapWeight).toBe(1); // gaps stay neutral at the floor
-    expect(p.bullBias).toBe(0); // theme mix unchanged at the floor
+    expect(p.koopaBias).toBe(0); // theme mix unchanged at the floor
   });
 
   it('clamps the multipliers so reroll pressure stays bounded (KTD7)', () => {
@@ -81,7 +81,7 @@ describe('difficultyParams (R3/R7)', () => {
 describe('difficultyParamsFor (the realize-layer entry point, R2)', () => {
   it('returns identity (no-op) params when difficulty is undefined — legacy path unchanged', () => {
     expect(difficultyParamsFor(20, undefined)).toEqual(IDENTITY_PARAMS);
-    expect(IDENTITY_PARAMS).toEqual({ densityScale: 1, gapWeight: 1, bullBias: 0 });
+    expect(IDENTITY_PARAMS).toEqual({ densityScale: 1, gapWeight: 1, koopaBias: 0 });
   });
 
   it('scales by level and tier when difficulty is provided', () => {
